@@ -56,7 +56,7 @@ export const EmailService = {
         <p>Welcome to ${env.APP_NAME}! Use the code below to verify your email address.</p>
         <div class="otp">${otp}</div>
         <p>This code expires in <strong>${env.OTP_EXPIRY_MINUTES} minutes</strong>. Do not share it with anyone.</p>
-        <p>If you didn't sign up, you can safely ignore this email.</p>`
+        <p>If you didn't sign up, you can safely ignore this email.</p>`,
       ),
     });
   },
@@ -100,7 +100,11 @@ export const EmailService = {
     const tmpl = templates[type];
     if (!tmpl) return;
 
-    await send({ to: user.email, subject: tmpl.subject, html: base(tmpl.subject, tmpl.body) });
+    await send({
+      to: user.email,
+      subject: tmpl.subject,
+      html: base(tmpl.subject, tmpl.body),
+    });
   },
 
   async sendWelcome(user: User) {
@@ -115,12 +119,18 @@ export const EmailService = {
           <li><strong>Sell:</strong> List any item and set a starting price.</li>
           <li><strong>Bid:</strong> Browse listings and place bids on items you love.</li>
           <li><strong>Safe payments:</strong> We hold money securely until you confirm receipt.</li>
-        </ul>`
+        </ul>`,
       ),
     });
   },
 
-  async sendBidPlaced(seller_email: string, seller_name: string, bidder_name: string, listing_title: string, amount: number) {
+  async sendBidPlaced(
+    seller_email: string,
+    seller_name: string,
+    bidder_name: string,
+    listing_title: string,
+    amount: number,
+  ) {
     await send({
       to: seller_email,
       subject: `New bid on your listing: ${listing_title}`,
@@ -128,12 +138,18 @@ export const EmailService = {
         "New Bid Received",
         `<p>Hi <strong>${seller_name}</strong>,</p>
         <p><strong>${bidder_name}</strong> just placed a bid of <strong>₦${amount.toLocaleString()}</strong> on your listing "<strong>${listing_title}</strong>".</p>
-        <p>Log in to review the bid and decide whether to accept it.</p>`
+        <p>Log in to review the bid and decide whether to accept it.</p>`,
       ),
     });
   },
 
-  async sendBidAccepted(buyer_email: string, buyer_name: string, listing_title: string, amount: number, transaction_id: string) {
+  async sendBidAccepted(
+    buyer_email: string,
+    buyer_name: string,
+    listing_title: string,
+    amount: number,
+    transaction_id: string,
+  ) {
     await send({
       to: buyer_email,
       subject: `Your bid was accepted — complete payment for "${listing_title}"`,
@@ -142,12 +158,18 @@ export const EmailService = {
         `<p>Hi <strong>${buyer_name}</strong>,</p>
         <p>Your bid of <strong>₦${amount.toLocaleString()}</strong> on "<strong>${listing_title}</strong>" has been accepted.</p>
         <p>Please complete payment to secure your item.</p>
-        <p><strong>Transaction ID:</strong> ${transaction_id}</p>`
+        <p><strong>Transaction ID:</strong> ${transaction_id}</p>`,
       ),
     });
   },
 
-  async sendPaymentReceived(seller_email: string, seller_name: string, listing_title: string, seller_amount: number, transaction_id: string) {
+  async sendPaymentReceived(
+    seller_email: string,
+    seller_name: string,
+    listing_title: string,
+    seller_amount: number,
+    transaction_id: string,
+  ) {
     await send({
       to: seller_email,
       subject: `Payment received — ship your item "${listing_title}"`,
@@ -156,12 +178,18 @@ export const EmailService = {
         `<p>Hi <strong>${seller_name}</strong>,</p>
         <p>The buyer has paid for "<strong>${listing_title}</strong>". Funds (<strong>₦${seller_amount.toLocaleString()}</strong> after fees) are held in escrow.</p>
         <p>Please arrange shipping with the buyer. Once they confirm receipt, funds will be released to you.</p>
-        <p><strong>Transaction ID:</strong> ${transaction_id}</p>`
+        <p><strong>Transaction ID:</strong> ${transaction_id}</p>`,
       ),
     });
   },
 
-  async sendReceiptConfirmed(seller_email: string, seller_name: string, listing_title: string, seller_amount: number, auto_release_at: Date) {
+  async sendReceiptConfirmed(
+    seller_email: string,
+    seller_name: string,
+    listing_title: string,
+    seller_amount: number,
+    auto_release_at: Date,
+  ) {
     await send({
       to: seller_email,
       subject: `Buyer confirmed receipt — payment releasing soon for "${listing_title}"`,
@@ -169,12 +197,17 @@ export const EmailService = {
         "Receipt Confirmed",
         `<p>Hi <strong>${seller_name}</strong>,</p>
         <p>The buyer has confirmed they received "<strong>${listing_title}</strong>".</p>
-        <p>Your payment of <strong>₦${seller_amount.toLocaleString()}</strong> will be automatically released on <strong>${auto_release_at.toLocaleString()}</strong>.</p>`
+        <p>Your payment of <strong>₦${seller_amount.toLocaleString()}</strong> will be automatically released on <strong>${auto_release_at.toLocaleString()}</strong>.</p>`,
       ),
     });
   },
 
-  async sendPaymentReleased(seller_email: string, seller_name: string, listing_title: string, seller_amount: number) {
+  async sendPaymentReleased(
+    seller_email: string,
+    seller_name: string,
+    listing_title: string,
+    seller_amount: number,
+  ) {
     await send({
       to: seller_email,
       subject: `Payment released! ₦${seller_amount.toLocaleString()} for "${listing_title}"`,
@@ -182,12 +215,17 @@ export const EmailService = {
         "Payment Released",
         `<p>Hi <strong>${seller_name}</strong>,</p>
         <p>Your payment of <strong>₦${seller_amount.toLocaleString()}</strong> for "<strong>${listing_title}</strong>" has been released.</p>
-        <p>Thank you for selling on ${env.APP_NAME}!</p>`
+        <p>Thank you for selling on ${env.APP_NAME}!</p>`,
       ),
     });
   },
 
-  async sendDisputeRaised(seller_email: string, seller_name: string, listing_title: string, transaction_id: string) {
+  async sendDisputeRaised(
+    seller_email: string,
+    seller_name: string,
+    listing_title: string,
+    transaction_id: string,
+  ) {
     await send({
       to: seller_email,
       subject: `Dispute raised on your sale — "${listing_title}"`,
@@ -196,7 +234,7 @@ export const EmailService = {
         `<p>Hi <strong>${seller_name}</strong>,</p>
         <p>The buyer has raised a dispute on the transaction for "<strong>${listing_title}</strong>".</p>
         <p><strong>Transaction ID:</strong> ${transaction_id}</p>
-        <p>Our team will review and get in touch with both parties. Payment is held until resolved.</p>`
+        <p>Our team will review and get in touch with both parties. Payment is held until resolved.</p>`,
       ),
     });
   },

@@ -10,7 +10,12 @@ import { sendSuccess } from "@/utils/response";
 import { User } from "@/models/v1/user.model";
 import { Otp } from "@/models/v1/otp.model";
 import { EmailService } from "@/api/v1/services/email.service";
-import type { SignupInput, VerifyEmailInput, ResendOtpInput, LoginInput } from "@/api/v1/validators/auth";
+import type {
+  SignupInput,
+  VerifyEmailInput,
+  ResendOtpInput,
+  LoginInput,
+} from "@/api/v1/validators/auth";
 
 const generateOtp = (): string => String(randomInt(100000, 999999));
 
@@ -28,14 +33,16 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
     if (existing.status === "UNVERIFIED") {
       throw new AppError(
         "An unverified account with this email already exists. Please check your email or request a new OTP.",
-        409
+        409,
       );
     }
     throw new AppError("An account with this email already exists", 409);
   }
 
   const hashed = await bcrypt.hash(password, 12);
-  const delete_at = new Date(Date.now() + env.ACCOUNT_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  const delete_at = new Date(
+    Date.now() + env.ACCOUNT_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const user = await User.create({
     first_name,
@@ -50,7 +57,10 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
 
   await Otp.create({ user_id: user._id, code: otp, expires_at });
 
-  await EmailService.sendOtp({ first_name: user.first_name, email: user.email }, otp);
+  await EmailService.sendOtp(
+    { first_name: user.first_name, email: user.email },
+    otp,
+  );
 
   return sendSuccess({
     res,
@@ -77,8 +87,10 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
     .lean();
 
   if (!user) throw new AppError("Account not found", 404);
-  if (user.status === "ACTIVE") throw new AppError("Email is already verified", 409);
-  if (user.status === "SUSPENDED") throw new AppError("Account is suspended", 403);
+  if (user.status === "ACTIVE")
+    throw new AppError("Email is already verified", 409);
+  if (user.status === "SUSPENDED")
+    throw new AppError("Account is suspended", 403);
 
   const record = await Otp.findOne({
     user_id: user._id,
@@ -88,14 +100,21 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
   }).lean();
 
   if (!record) {
-    throw new AppError("Invalid or expired OTP. Please request a new one.", 400);
+    throw new AppError(
+      "Invalid or expired OTP. Please request a new one.",
+      400,
+    );
   }
 
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
     await Otp.findByIdAndUpdate(record._id, { used: true }, { session });
-    await User.findByIdAndUpdate(user._id, { status: "ACTIVE", delete_at: null }, { session });
+    await User.findByIdAndUpdate(
+      user._id,
+      { status: "ACTIVE", delete_at: null },
+      { session },
+    );
     await session.commitTransaction();
   } catch (err) {
     await session.abortTransaction();
@@ -104,7 +123,10 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
     session.endSession();
   }
 
-  await EmailService.sendWelcome({ first_name: user.first_name, email: user.email });
+  await EmailService.sendWelcome({
+    first_name: user.first_name,
+    email: user.email,
+  });
 
   const token = signToken(user._id.toString());
 
@@ -127,10 +149,13 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
 export const resendOtp = asyncHandler(async (req: Request, res: Response) => {
   const { email } = req.body as ResendOtpInput;
 
-  const user = await User.findOne({ email }).select("first_name email status").lean();
+  const user = await User.findOne({ email })
+    .select("first_name email status")
+    .lean();
 
   if (!user) throw new AppError("Account not found", 404);
-  if (user.status === "ACTIVE") throw new AppError("Email is already verified", 409);
+  if (user.status === "ACTIVE")
+    throw new AppError("Email is already verified", 409);
 
   await Otp.updateMany({ user_id: user._id, used: false }, { used: true });
 
@@ -139,7 +164,10 @@ export const resendOtp = asyncHandler(async (req: Request, res: Response) => {
 
   await Otp.create({ user_id: user._id, code: otp, expires_at });
 
-  await EmailService.sendOtp({ first_name: user.first_name, email: user.email }, otp);
+  await EmailService.sendOtp(
+    { first_name: user.first_name, email: user.email },
+    otp,
+  );
 
   return sendSuccess({
     res,
@@ -162,12 +190,15 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   if (user.status === "UNVERIFIED") {
     throw new AppError(
       "Your account is not verified. Please check your email for the verification code.",
-      403
+      403,
     );
   }
 
   if (user.status === "SUSPENDED") {
-    throw new AppError("Your account has been suspended. Contact support.", 403);
+    throw new AppError(
+      "Your account has been suspended. Contact support.",
+      403,
+    );
   }
 
   const token = signToken(user._id.toString());
