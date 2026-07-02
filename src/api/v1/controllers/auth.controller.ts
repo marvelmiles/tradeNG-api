@@ -44,27 +44,34 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
     Date.now() + env.ACCOUNT_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
   );
 
-  const user = await User.create({
-    first_name,
-    last_name,
-    email,
-    password: hashed,
-    delete_at,
-  });
+  let user;
+  try {
+    user = await User.create({
+      first_name,
+      last_name,
+      email,
+      password: hashed,
+      delete_at,
+    });
 
-  const otp = generateOtp();
-  const expires_at = new Date(Date.now() + env.OTP_EXPIRY_MINUTES * 60 * 1000);
+    const otp = generateOtp();
+    const expires_at = new Date(
+      Date.now() + env.OTP_EXPIRY_MINUTES * 60 * 1000,
+    );
 
-  await Otp.create({ user_id: user._id, code: otp, expires_at });
+    await Otp.create({ user_id: user._id, code: otp, expires_at });
 
-  console.log(`Generated OTP for ${email}: ${otp}`); // Log the OTP for debugging purposes
-
-  await EmailService.sendOtp(
-    { first_name: user.first_name, email: user.email },
-    otp,
-  );
-
-  console.log(`Sent OTP email to ${email}`); // Log the email sending action for debugging purposes
+    await EmailService.sendOtp(
+      { first_name: user.first_name, email: user.email },
+      otp,
+    );
+  } catch (err) {
+    if (user) {
+      await User.deleteOne({ _id: user._id });
+      await Otp.deleteMany({ user_id: user._id });
+    }
+    throw err;
+  }
 
   return sendSuccess({
     res,

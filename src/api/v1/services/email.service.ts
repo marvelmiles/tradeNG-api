@@ -1,4 +1,4 @@
-import { transporter } from "@/lib/mailer";
+import { resend } from "@/lib/mailer";
 import { env } from "@/config/env";
 
 interface User {
@@ -13,7 +13,12 @@ interface EmailOptions {
 }
 
 const send = async (options: EmailOptions): Promise<void> => {
-  await transporter.sendMail({ from: env.SMTP_FROM, ...options });
+  const { error } = await resend.emails.send({
+    from: env.SMTP_FROM,
+    ...options,
+    to: [options.to],
+  });
+  if (error) throw new Error(error.message);
 };
 
 const base = (title: string, body: string): string => `

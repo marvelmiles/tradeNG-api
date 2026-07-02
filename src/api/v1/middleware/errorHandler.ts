@@ -7,14 +7,17 @@ export const errorHandler = (
   err: unknown,
   _req: Request,
   res: Response,
-  _next: NextFunction
+  _next: NextFunction,
 ): void => {
   if (err instanceof ZodError) {
     sendError({
       res,
       message: "Validation error",
       code: 400,
-      errors: err.issues.map((e: ZodIssue) => ({ field: e.path.join("."), message: e.message })),
+      errors: err.issues.map((e: ZodIssue) => ({
+        field: e.path.join("."),
+        message: e.message,
+      })),
     });
     return;
   }
@@ -30,7 +33,6 @@ export const errorHandler = (
   }
 
   const stack = err instanceof Error ? err.stack : undefined;
-  console.error("[Unhandled Error]", err);
 
   sendError({
     res,
