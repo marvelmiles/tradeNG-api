@@ -57,10 +57,14 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
 
   await Otp.create({ user_id: user._id, code: otp, expires_at });
 
+  console.log(`Generated OTP for ${email}: ${otp}`); // Log the OTP for debugging purposes
+
   await EmailService.sendOtp(
     { first_name: user.first_name, email: user.email },
     otp,
   );
+
+  console.log(`Sent OTP email to ${email}`); // Log the email sending action for debugging purposes
 
   return sendSuccess({
     res,

@@ -19,7 +19,8 @@ const HTTP_STATUS_TEXT: Record<number, string> = {
 };
 
 const resolveStatusText = (code: number): string =>
-  HTTP_STATUS_TEXT[code] ?? (code >= 500 ? "SERVER_ERROR" : code >= 400 ? "CLIENT_ERROR" : "SUCCESS");
+  HTTP_STATUS_TEXT[code] ??
+  (code >= 500 ? "SERVER_ERROR" : code >= 400 ? "CLIENT_ERROR" : "SUCCESS");
 
 interface SuccessPayload<T> {
   res: Response;
@@ -57,7 +58,18 @@ export const sendSuccess = <T>({
   });
 };
 
-export const sendError = ({ res, message, code = 500, stack = null, errors = null }: ErrorPayload): Response => {
+export const sendError = ({
+  res,
+  message,
+  code = 500,
+  stack = null,
+  errors = null,
+}: ErrorPayload): Response => {
+  console.log(
+    `[Error] ${code} - ${message}`,
+    stack ?? "No stack trace available",
+  );
+
   return res.status(code).json({
     success: false,
     message,
