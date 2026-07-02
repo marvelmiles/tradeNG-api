@@ -1,4 +1,4 @@
-import { resend } from "@/lib/mailer";
+import { emailjs } from "@/lib/mailer";
 import { env } from "@/config/env";
 
 interface User {
@@ -13,12 +13,20 @@ interface EmailOptions {
 }
 
 const send = async (options: EmailOptions): Promise<void> => {
-  const { error } = await resend.emails.send({
-    from: env.SMTP_FROM,
-    ...options,
-    to: [options.to],
-  });
-  if (error) throw new Error(error.message);
+  try {
+    await emailjs.send(env.EMAILJS_SERVICE_ID, env.EMAILJS_TEMPLATE_ID, {
+      to_email: options.to,
+      from_email: env.SMTP_FROM,
+      subject: options.subject,
+      body_html: options.html,
+    });
+  } catch (err) {
+    const message =
+      err && typeof err === "object" && "text" in err
+        ? String((err as { text: unknown }).text)
+        : "Failed to send email";
+    throw new Error(message);
+  }
 };
 
 const base = (title: string, body: string): string => `

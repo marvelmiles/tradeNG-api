@@ -1,4 +1,9 @@
-import { Resend } from "resend";
+import emailjs from "@emailjs/nodejs";
 import { env } from "@/config/env";
 
-export const resend = new Resend(env.RESEND_API_KEY);
+emailjs.init({
+  publicKey: env.EMAILJS_PUBLIC_KEY,
+  privateKey: env.EMAILJS_PRIVATE_KEY,
+});
+
+export { emailjs };
