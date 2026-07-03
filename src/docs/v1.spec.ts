@@ -128,7 +128,7 @@ export const v1Spec = {
     description: `
 ## Overview
 
-TradeNG is a peer-to-peer escrow marketplace where sellers list items, buyers place bids, and payments are held in escrow until the buyer confirms receipt.
+TradeNG is a peer-to-peer escrow marketplace where sellers list items, buyers purchase directly or negotiate a price via offers, and payments are held in escrow until the buyer confirms receipt.
 
 ## Base URL
 
@@ -142,7 +142,7 @@ Protected endpoints require a **Bearer JWT** in the \`Authorization\` header:
 Authorization: Bearer <token>
 \`\`\`
 
-Tokens are obtained from \`POST /auth/login\` or \`POST /auth/verify-email\` and are valid for **7 days** by default.
+Tokens are obtained from \`POST /auth/login\` or \`POST /auth/verify-email\` and are valid for **7 days** by default. Forgotten passwords can be reset via \`POST /auth/forgot-password\` and \`POST /auth/reset-password\` using a one-time OTP.
 
 ## Response Envelope
 
@@ -210,14 +210,17 @@ All list endpoints support **cursor-based** (default) and **page-based** paginat
 ## Escrow Flow
 
 \`\`\`
-Seller creates listing → Buyer places bid → Seller accepts bid
-→ Buyer initiates payment (records payment_ref)
+Seller creates a DRAFT listing → uploads images/video via /uploads → publishes it (PATCH /listings/:id/publish)
+→ Buyer either buys directly (POST /listings/:id/buy) or negotiates via Offers
+  (POST /offers/listings/:listingId, then accept/counter/decline)
+→ A direct buy or an accepted offer creates a Transaction in PENDING_PAYMENT status
+→ Buyer calls POST /transactions/:id/checkout to get a Nomba checkout_link and completes payment
 → Payment gateway webhooks /api/webhooks/payment
 → Platform confirms payment (status: PAID)
 → Seller ships item
 → Buyer confirms receipt (status: RECEIPT_CONFIRMED)
 → Buyer releases payment OR auto-releases after 48h (status: RELEASED)
-→ Seller receives funds
+→ Seller's wallet is credited and can be withdrawn to a payout bank
 \`\`\`
     `,
     contact: { name: "TradeNG Support", email: "support@tradeng.com" },
@@ -271,6 +274,17 @@ Seller creates listing → Buyer places bid → Seller accepts bid
           last_name: { type: "string", example: "Bello" },
         },
       },
+      SellerSummary: {
+        allOf: [
+          { $ref: "#/components/schemas/UserSummary" },
+          {
+            type: "object",
+            properties: {
+              is_verified_seller: { type: "boolean", example: true },
+            },
+          },
+        ],
+      },
       UserPublic: {
         allOf: [
           { $ref: "#/components/schemas/UserSummary" },
@@ -296,88 +310,182 @@ Seller creates listing → Buyer places bid → Seller accepts bid
           },
         ],
       },
+      NotificationSettings: {
+        type: "object",
+        properties: {
+          email_general: { type: "boolean", example: true },
+          email_offers: { type: "boolean", example: true },
+          in_app_general: { type: "boolean", example: true },
+          in_app_offers: { type: "boolean", example: true },
+        },
+      },
+      UserProfile: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
+          first_name: { type: "string", example: "Adeola" },
+          last_name: { type: "string", example: "Bello" },
+          email: { type: "string", format: "email", example: "adeola@example.com" },
+          phone_number: { type: "string", nullable: true, example: "+2348012345678" },
+          about: { type: "string", nullable: true, example: "Trusted electronics seller since 2023." },
+          address: { type: "string", nullable: true, example: "12 Admiralty Way, Lekki, Lagos" },
+          profile_photo: { type: "string", nullable: true, example: "https://res.cloudinary.com/tradeng/avatar.jpg" },
+          is_verified_seller: { type: "boolean", example: false },
+          notification_settings: { $ref: "#/components/schemas/NotificationSettings" },
+          created_at: { type: "string", format: "date-time", example: "2025-07-01T10:00:00.000Z" },
+        },
+      },
+
+      // ─── Category ───────────────────────────────────────────────
+      Category: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3600" },
+          name: { type: "string", example: "Mobile Phones & Tablets" },
+          slug: { type: "string", example: "mobile-phones-tablets" },
+          image: { type: "string", nullable: true, example: "https://res.cloudinary.com/tradeng/categories/phones.jpg" },
+          is_active: { type: "boolean", example: true },
+        },
+      },
+      CategoryRequest: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3610" },
+          name: { type: "string", example: "Vintage Vinyl Records" },
+          reason: {
+            type: "string",
+            example: "There's no category for collectible vinyl records and turntables.",
+          },
+          status: {
+            type: "string",
+            enum: ["PENDING", "APPROVED", "REJECTED"],
+            example: "PENDING",
+          },
+          resolved_category_id: { type: "string", nullable: true, example: null },
+          created_at: { type: "string", format: "date-time", example: "2025-07-01T10:00:00.000Z" },
+        },
+      },
 
       // ─── Listing ─────────────────────────────────────────────────
       Listing: {
         type: "object",
         properties: {
           id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
-          title: { type: "string", example: "iPhone 14 Pro Max – Midnight" },
+          item_name: { type: "string", example: "iPhone 14 Pro Max – Midnight" },
+          category: {
+            type: "object",
+            nullable: true,
+            properties: {
+              id: { type: "string", example: "686a1c4e3f9b2d0012ab3600" },
+              name: { type: "string", example: "Mobile Phones & Tablets" },
+              slug: { type: "string", example: "mobile-phones-tablets" },
+            },
+          },
+          condition: {
+            type: "string",
+            enum: ["NEW", "LIKE_NEW", "USED"],
+            example: "USED",
+          },
+          defect_description: {
+            type: "string",
+            nullable: true,
+            example: "Minor scratch on the back glass, not visible when cased.",
+          },
           description: {
             type: "string",
             example:
-              "Used for 6 months, no scratches. Comes with original box.",
+              "Used for 6 months, no scratches. Comes with original box and all accessories.",
           },
-          condition: { type: "string", enum: ["NEW", "USED"], example: "USED" },
-          start_price: { type: "number", example: 250000 },
-          ends_at: {
+          images: {
+            type: "array",
+            items: { type: "string", format: "uri" },
+            example: ["https://res.cloudinary.com/tradeng/uploads/img1.jpg"],
+          },
+          video: {
             type: "string",
-            format: "date-time",
             nullable: true,
-            example: "2025-08-01T00:00:00.000Z",
+            example: "https://res.cloudinary.com/tradeng/uploads/video1.mp4",
           },
+          price: { type: "number", example: 250000 },
+          allow_price_negotiation: { type: "boolean", example: true },
+          delivery_options: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: ["SELF_DELIVERY", "PICKUP", "HUB_DROPOFF"],
+            },
+            example: ["SELF_DELIVERY", "PICKUP"],
+          },
+          pickup_address: {
+            type: "string",
+            nullable: true,
+            example: "12 Admiralty Way, Lekki, Lagos",
+          },
+          location: { type: "string", nullable: true, example: "Lekki, Lagos" },
           status: {
             type: "string",
-            enum: ["ACTIVE", "ENDED", "SOLD", "CANCELLED"],
+            enum: ["DRAFT", "ACTIVE", "SOLD", "CANCELLED"],
             example: "ACTIVE",
           },
-          seller: { $ref: "#/components/schemas/UserSummary" },
+          seller: { $ref: "#/components/schemas/SellerSummary" },
+          view_count: { type: "integer", example: 42 },
           created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-01T10:00:00.000Z",
+          },
+          updated_at: {
             type: "string",
             format: "date-time",
             example: "2025-07-01T10:00:00.000Z",
           },
         },
       },
-      ListingWithBids: {
-        allOf: [
-          { $ref: "#/components/schemas/Listing" },
-          {
-            type: "object",
-            properties: {
-              top_bids: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    id: { type: "string", example: "686a1c4e3f9b2d0012ab34ee" },
-                    amount: { type: "number", example: 270000 },
-                    created_at: { type: "string", format: "date-time" },
-                    bidder: { $ref: "#/components/schemas/UserSummary" },
-                  },
-                },
-              },
-            },
-          },
-        ],
-      },
 
-      // ─── Bid ─────────────────────────────────────────────────────
-      Bid: {
+      // ─── Offer ───────────────────────────────────────────────────
+      Offer: {
         type: "object",
         properties: {
           id: { type: "string", example: "686a1c4e3f9b2d0012ab34ee" },
-          amount: { type: "number", example: 270000 },
+          listing: {
+            type: "object",
+            nullable: true,
+            properties: {
+              id: { type: "string" },
+              item_name: { type: "string" },
+              status: { type: "string" },
+            },
+          },
+          buyer: { $ref: "#/components/schemas/UserSummary" },
+          seller: { $ref: "#/components/schemas/UserSummary" },
+          amount: { type: "number", example: 230000 },
+          note: { type: "string", nullable: true, example: "Can you do ₦230,000? I'll pick up today." },
           status: {
             type: "string",
-            enum: ["PENDING", "ACCEPTED", "REJECTED", "WITHDRAWN"],
+            enum: ["PENDING", "ACCEPTED", "COUNTERED", "DECLINED", "WITHDRAWN"],
             example: "PENDING",
+          },
+          parent_offer_id: {
+            type: "string",
+            nullable: true,
+            description: "Set on a counter-offer — points to the offer it counters.",
+            example: null,
+          },
+          responded_at: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+            example: null,
           },
           created_at: {
             type: "string",
             format: "date-time",
             example: "2025-07-02T08:00:00.000Z",
           },
-          bidder: { $ref: "#/components/schemas/UserSummary" },
-          listing: {
-            type: "object",
-            nullable: true,
-            properties: {
-              id: { type: "string" },
-              title: { type: "string" },
-              condition: { type: "string", enum: ["NEW", "USED"] },
-              status: { type: "string" },
-            },
+          updated_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-02T08:00:00.000Z",
           },
         },
       },
@@ -387,15 +495,15 @@ Seller creates listing → Buyer places bid → Seller accepts bid
         type: "object",
         properties: {
           id: { type: "string", example: "686a1c4e3f9b2d0012ab3500" },
-          amount: { type: "number", example: 270000 },
+          amount: { type: "number", example: 250000 },
           platform_fee: {
             type: "number",
-            example: 13500,
+            example: 12500,
             description: "5% platform commission deducted from the sale price.",
           },
           seller_amount: {
             type: "number",
-            example: 256500,
+            example: 237500,
             description: "Amount the seller receives after the platform fee.",
           },
           status: {
@@ -415,6 +523,7 @@ Seller creates listing → Buyer places bid → Seller accepts bid
             nullable: true,
             example: "PAY-20250701-ABC123",
           },
+          dispute_id: { type: "string", nullable: true, example: null },
           receipt_confirmed_at: {
             type: "string",
             format: "date-time",
@@ -440,17 +549,203 @@ Seller creates listing → Buyer places bid → Seller accepts bid
             format: "date-time",
             example: "2025-07-02T09:00:00.000Z",
           },
+          updated_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-02T09:00:00.000Z",
+          },
           listing: {
             type: "object",
             nullable: true,
             properties: {
               id: { type: "string" },
-              title: { type: "string" },
-              condition: { type: "string", enum: ["NEW", "USED"] },
+              item_name: { type: "string" },
+              condition: { type: "string", enum: ["NEW", "LIKE_NEW", "USED"] },
             },
           },
           buyer: { $ref: "#/components/schemas/UserSummary" },
           seller: { $ref: "#/components/schemas/UserSummary" },
+        },
+      },
+      Dispute: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3700" },
+          transaction_id: { type: "string", example: "686a1c4e3f9b2d0012ab3500" },
+          description: {
+            type: "string",
+            example: "Item received was significantly different from the listing description.",
+          },
+          evidence_urls: {
+            type: "array",
+            items: { type: "string", format: "uri" },
+            example: [],
+          },
+          status: {
+            type: "string",
+            enum: ["OPEN", "RESOLVED_BUYER", "RESOLVED_SELLER", "CLOSED"],
+            example: "OPEN",
+          },
+          resolution_note: { type: "string", nullable: true, example: null },
+          resolved_at: { type: "string", format: "date-time", nullable: true, example: null },
+          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+        },
+      },
+      Order: {
+        allOf: [
+          { $ref: "#/components/schemas/Transaction" },
+          {
+            type: "object",
+            properties: {
+              timeline: {
+                type: "array",
+                description: "Computed lifecycle timeline for the order.",
+                items: {
+                  type: "object",
+                  properties: {
+                    state: { type: "string", example: "RECEIPT_CONFIRMED" },
+                    label: { type: "string", example: "Buyer confirmed delivery" },
+                    at: { type: "string", format: "date-time", nullable: true, example: null },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
+
+      // ─── Wallet ──────────────────────────────────────────────────
+      Wallet: {
+        type: "object",
+        properties: {
+          available_balance: { type: "number", example: 237500 },
+          escrow_balance: { type: "number", example: 0 },
+        },
+      },
+      WalletLedgerEntry: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3800" },
+          type: {
+            type: "string",
+            enum: ["ESCROW_HOLD", "ESCROW_RELEASE", "WITHDRAWAL_HOLD", "WITHDRAWAL_REVERSAL"],
+            example: "ESCROW_RELEASE",
+          },
+          bucket: { type: "string", enum: ["AVAILABLE", "ESCROW"], example: "AVAILABLE" },
+          amount: { type: "number", example: 237500 },
+          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+        },
+      },
+      PayoutBank: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3900" },
+          bank_name: { type: "string", example: "Guaranty Trust Bank" },
+          account_number: { type: "string", example: "0123456789" },
+          account_name: { type: "string", example: "Adeola Bello" },
+          is_default: { type: "boolean", example: true },
+        },
+      },
+      WithdrawalRequest: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3a00" },
+          amount: { type: "number", example: 100000 },
+          bank_name: { type: "string", example: "Guaranty Trust Bank" },
+          account_number: { type: "string", example: "0123456789" },
+          account_name: { type: "string", example: "Adeola Bello" },
+          status: {
+            type: "string",
+            enum: ["PENDING", "COMPLETED", "REJECTED"],
+            example: "PENDING",
+          },
+          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+        },
+      },
+
+      // ─── Conversations & Messages ──────────────────────────────
+      Conversation: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3b00" },
+          listing: {
+            type: "object",
+            nullable: true,
+            properties: {
+              id: { type: "string" },
+              item_name: { type: "string" },
+              images: { type: "array", items: { type: "string", format: "uri" } },
+            },
+          },
+          buyer: { $ref: "#/components/schemas/UserSummary" },
+          seller: { $ref: "#/components/schemas/UserSummary" },
+          last_message_at: { type: "string", format: "date-time", nullable: true, example: null },
+          last_message_preview: { type: "string", nullable: true, example: null },
+        },
+      },
+      Message: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3c00" },
+          sender_id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
+          message_type: {
+            type: "string",
+            enum: ["TEXT", "OFFER", "SYSTEM"],
+            example: "TEXT",
+          },
+          body: { type: "string", nullable: true, example: "Is this still available?" },
+          offer_id: { type: "string", nullable: true, example: null },
+          read_at: { type: "string", format: "date-time", nullable: true, example: null },
+          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+        },
+      },
+
+      // ─── Notification ────────────────────────────────────────────
+      Notification: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3d00" },
+          type: {
+            type: "string",
+            enum: [
+              "OFFER_RECEIVED",
+              "OFFER_ACCEPTED",
+              "OFFER_COUNTERED",
+              "OFFER_DECLINED",
+              "PAYMENT_RECEIVED",
+              "RECEIPT_CONFIRMED",
+              "PAYMENT_RELEASED",
+              "DISPUTE_RAISED",
+              "DISPUTE_RESOLVED",
+              "REVIEW_RECEIVED",
+              "CATEGORY_REQUEST_APPROVED",
+              "NEW_MESSAGE",
+              "WITHDRAWAL_UPDATE",
+              "SELLER_VERIFIED",
+            ],
+            example: "OFFER_RECEIVED",
+          },
+          title: { type: "string", example: "New offer received" },
+          body: { type: "string", example: "Adeola offered ₦230,000 for \"iPhone 14 Pro Max\"" },
+          related_listing_id: { type: "string", nullable: true, example: null },
+          related_transaction_id: { type: "string", nullable: true, example: null },
+          related_conversation_id: { type: "string", nullable: true, example: null },
+          read_at: { type: "string", format: "date-time", nullable: true, example: null },
+          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+        },
+      },
+
+      // ─── Review ──────────────────────────────────────────────────
+      Review: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab3e00" },
+          reviewer_id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
+          reviewee_id: { type: "string", example: "686a1c4e3f9b2d0012ab34ee" },
+          reviewer_role: { type: "string", enum: ["BUYER", "SELLER"], example: "BUYER" },
+          rating: { type: "integer", minimum: 1, maximum: 5, example: 5 },
+          comment: { type: "string", nullable: true, example: "Fast shipping, item exactly as described." },
+          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
         },
       },
     },
@@ -706,6 +1001,82 @@ OTP codes expire after **15 minutes** by default.
       },
     },
 
+    "/auth/forgot-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Request a password reset OTP",
+        description:
+          "Sends a 6-digit password-reset OTP to the email address if an **ACTIVE** account exists for it. Always returns a generic success message, regardless of whether the account exists, to avoid leaking account existence.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email"],
+                properties: {
+                  email: {
+                    type: "string",
+                    format: "email",
+                    example: "adeola@example.com",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": ok(null, "If an account exists for this email, a password reset code has been sent."),
+          "400": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
+    },
+
+    "/auth/reset-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Reset password with OTP",
+        description:
+          "Resets the account password using the OTP sent by `POST /auth/forgot-password`. OTP codes expire after **15 minutes** by default.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "otp", "new_password"],
+                properties: {
+                  email: {
+                    type: "string",
+                    format: "email",
+                    example: "adeola@example.com",
+                  },
+                  otp: {
+                    type: "string",
+                    minLength: 6,
+                    maxLength: 6,
+                    pattern: "^\\d{6}$",
+                    example: "847261",
+                  },
+                  new_password: {
+                    type: "string",
+                    minLength: 8,
+                    example: "NewSecret123",
+                    description:
+                      "Must be at least 8 characters, contain one uppercase letter and one number.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": ok(null, "Password reset successfully. You can now log in."),
+          "400": errorEnvelope(400, "BAD_REQUEST", "Invalid or expired OTP."),
+        },
+      },
+    },
+
     // ═══════════════════════════════════════════════════════════════
     //  LISTINGS
     // ═══════════════════════════════════════════════════════════════
@@ -714,27 +1085,58 @@ OTP codes expire after **15 minutes** by default.
         tags: ["Listings"],
         summary: "Browse listings",
         description:
-          "Returns a paginated list of listings. Defaults to showing **ACTIVE** listings. Supports full-text search via `q`.",
+          "Returns a paginated list of listings. Defaults to showing **ACTIVE** listings. Supports full-text search via `q` and several filters.",
         parameters: [
           {
             name: "q",
             in: "query",
             schema: { type: "string" },
-            description: "Full-text search term across title and description.",
+            description: "Full-text search term across item name and description.",
             example: "iPhone",
+          },
+          {
+            name: "category_id",
+            in: "query",
+            schema: { type: "string" },
+            description: "Filter by category ID.",
           },
           {
             name: "condition",
             in: "query",
-            schema: { type: "string", enum: ["NEW", "USED"] },
+            schema: { type: "string", enum: ["NEW", "LIKE_NEW", "USED"] },
             description: "Filter by item condition.",
+          },
+          {
+            name: "min_price",
+            in: "query",
+            schema: { type: "number", minimum: 0 },
+            description: "Minimum price in Naira (NGN).",
+          },
+          {
+            name: "max_price",
+            in: "query",
+            schema: { type: "number", minimum: 0 },
+            description: "Maximum price in Naira (NGN).",
+          },
+          {
+            name: "location",
+            in: "query",
+            schema: { type: "string" },
+            description: "Filter by location (case-insensitive partial match).",
+            example: "Lagos",
+          },
+          {
+            name: "verified_sellers_only",
+            in: "query",
+            schema: { type: "boolean" },
+            description: "Only return listings from verified sellers.",
           },
           {
             name: "status",
             in: "query",
             schema: {
               type: "string",
-              enum: ["ACTIVE", "ENDED", "SOLD", "CANCELLED"],
+              enum: ["DRAFT", "ACTIVE", "SOLD", "CANCELLED"],
               default: "ACTIVE",
             },
             description: "Filter by listing status.",
@@ -760,8 +1162,11 @@ OTP codes expire after **15 minutes** by default.
       post: {
         tags: ["Listings"],
         summary: "Create a listing",
-        description:
-          "Creates a new item listing. The authenticated user becomes the **seller**. `start_price` sets the minimum bid floor.",
+        description: `
+Creates a new item listing. The authenticated user becomes the **seller**.
+
+Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), or omit/leave as \`"DRAFT"\` to save a draft and publish later via \`PATCH /listings/{id}/publish\`.
+        `,
         security: BEARER,
         requestBody: {
           required: true,
@@ -769,13 +1174,27 @@ OTP codes expire after **15 minutes** by default.
             "application/json": {
               schema: {
                 type: "object",
-                required: ["title", "description", "condition", "start_price"],
+                required: ["item_name", "category_id", "condition", "description", "price", "delivery_options"],
                 properties: {
-                  title: {
+                  item_name: {
                     type: "string",
                     minLength: 3,
                     maxLength: 120,
                     example: "iPhone 14 Pro Max – Midnight",
+                  },
+                  category_id: {
+                    type: "string",
+                    example: "686a1c4e3f9b2d0012ab3600",
+                  },
+                  condition: {
+                    type: "string",
+                    enum: ["NEW", "LIKE_NEW", "USED"],
+                    example: "USED",
+                  },
+                  defect_description: {
+                    type: "string",
+                    maxLength: 1000,
+                    example: "Minor scratch on the back glass, not visible when cased.",
                   },
                   description: {
                     type: "string",
@@ -784,26 +1203,48 @@ OTP codes expire after **15 minutes** by default.
                     example:
                       "Used for 6 months, no scratches. Comes with original box and all accessories.",
                   },
-                  condition: {
-                    type: "string",
-                    enum: ["NEW", "USED"],
-                    example: "USED",
+                  images: {
+                    type: "array",
+                    items: { type: "string", format: "uri" },
+                    maxItems: 8,
+                    description: "Cloudinary URLs returned by `POST /uploads/images`.",
                   },
-                  start_price: {
+                  video: {
+                    type: "string",
+                    format: "uri",
+                    description: "Cloudinary URL returned by `POST /uploads/video`.",
+                  },
+                  price: {
                     type: "number",
                     minimum: 0,
                     exclusiveMinimum: true,
                     example: 250000,
-                    description:
-                      "Minimum bid floor in Naira (NGN). Must be greater than 0.",
+                    description: "Price in Naira (NGN). Must be greater than 0.",
                   },
-                  ends_at: {
+                  allow_price_negotiation: {
+                    type: "boolean",
+                    default: false,
+                    description: "Whether buyers can send offers via `/offers`.",
+                  },
+                  delivery_options: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["SELF_DELIVERY", "PICKUP", "HUB_DROPOFF"],
+                    },
+                    minItems: 1,
+                    example: ["SELF_DELIVERY", "PICKUP"],
+                  },
+                  pickup_address: {
                     type: "string",
-                    format: "date-time",
-                    nullable: true,
-                    example: "2025-08-01T00:00:00.000Z",
-                    description:
-                      "Optional ISO 8601 datetime when the listing stops accepting bids. Must be in the future.",
+                    maxLength: 300,
+                    description: "Required when `delivery_options` includes `PICKUP`.",
+                  },
+                  location: { type: "string", maxLength: 120, example: "Lekki, Lagos" },
+                  status: {
+                    type: "string",
+                    enum: ["DRAFT", "ACTIVE"],
+                    default: "DRAFT",
                   },
                 },
               },
@@ -820,7 +1261,6 @@ OTP codes expire after **15 minutes** by default.
           ),
           "400": { $ref: "#/components/responses/ValidationError" },
           "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
         },
       },
     },
@@ -830,9 +1270,17 @@ OTP codes expire after **15 minutes** by default.
         tags: ["Listings"],
         summary: "Get my listings",
         description:
-          "Returns all listings created by the authenticated seller, in reverse chronological order.",
+          "Returns all listings created by the authenticated seller, in reverse chronological order. Includes drafts.",
         security: BEARER,
-        parameters: paginationQueryParams,
+        parameters: [
+          {
+            name: "status",
+            in: "query",
+            schema: { type: "string", enum: ["DRAFT", "ACTIVE", "SOLD", "CANCELLED"] },
+            description: "Filter by listing status.",
+          },
+          ...paginationQueryParams,
+        ],
         responses: {
           "200": ok(
             {
@@ -847,7 +1295,6 @@ OTP codes expire after **15 minutes** by default.
             "Seller's listings with pagination.",
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": { $ref: "#/components/responses/Forbidden" },
         },
       },
     },
@@ -857,7 +1304,7 @@ OTP codes expire after **15 minutes** by default.
         tags: ["Listings"],
         summary: "Get a listing",
         description:
-          "Returns full details of a single listing including the top 5 highest active bids.",
+          "Returns full details of a single listing. Increments the listing's `view_count`.",
         parameters: [
           {
             name: "id",
@@ -873,10 +1320,10 @@ OTP codes expire after **15 minutes** by default.
             {
               type: "object",
               properties: {
-                listing: { $ref: "#/components/schemas/ListingWithBids" },
+                listing: { $ref: "#/components/schemas/Listing" },
               },
             },
-            "Listing details with top bids.",
+            "Listing details.",
           ),
           "404": { $ref: "#/components/responses/NotFound" },
         },
@@ -885,7 +1332,7 @@ OTP codes expire after **15 minutes** by default.
         tags: ["Listings"],
         summary: "Update a listing",
         description:
-          "Partially updates an **ACTIVE** listing. Only the seller can update their own listing. `start_price` cannot be changed after creation.",
+          "Partially updates a **DRAFT** or **ACTIVE** listing. Only the seller can update their own listing. `status` cannot be changed here — use `PATCH /listings/{id}/publish` to publish a draft.",
         security: BEARER,
         parameters: [
           {
@@ -904,24 +1351,38 @@ OTP codes expire after **15 minutes** by default.
               schema: {
                 type: "object",
                 properties: {
-                  title: {
+                  item_name: {
                     type: "string",
                     minLength: 3,
                     maxLength: 120,
                     example: "iPhone 14 Pro Max – Midnight (Updated)",
                   },
+                  category_id: { type: "string" },
+                  condition: { type: "string", enum: ["NEW", "LIKE_NEW", "USED"] },
+                  defect_description: { type: "string", maxLength: 1000 },
                   description: {
                     type: "string",
                     minLength: 10,
                     maxLength: 2000,
                   },
-                  condition: { type: "string", enum: ["NEW", "USED"] },
-                  ends_at: {
-                    type: "string",
-                    format: "date-time",
-                    nullable: true,
-                    example: "2025-09-01T00:00:00.000Z",
+                  images: {
+                    type: "array",
+                    items: { type: "string", format: "uri" },
+                    maxItems: 8,
                   },
+                  video: { type: "string", format: "uri" },
+                  price: { type: "number", minimum: 0, exclusiveMinimum: true },
+                  allow_price_negotiation: { type: "boolean" },
+                  delivery_options: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["SELF_DELIVERY", "PICKUP", "HUB_DROPOFF"],
+                    },
+                    minItems: 1,
+                  },
+                  pickup_address: { type: "string", maxLength: 300 },
+                  location: { type: "string", maxLength: 120 },
                 },
               },
             },
@@ -938,7 +1399,7 @@ OTP codes expire after **15 minutes** by default.
           "400": errorEnvelope(
             400,
             "BAD_REQUEST",
-            "Only active listings can be updated.",
+            "Only draft or active listings can be updated.",
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
@@ -949,7 +1410,7 @@ OTP codes expire after **15 minutes** by default.
         tags: ["Listings"],
         summary: "Cancel a listing",
         description:
-          "Cancels an **ACTIVE** listing. Sets the status to `CANCELLED`. Only the seller can cancel their own listing.",
+          "Cancels a **DRAFT** or **ACTIVE** listing. Sets the status to `CANCELLED`. Only the seller can cancel their own listing.",
         security: BEARER,
         parameters: [
           {
@@ -966,7 +1427,7 @@ OTP codes expire after **15 minutes** by default.
           "400": errorEnvelope(
             400,
             "BAD_REQUEST",
-            "Only active listings can be cancelled.",
+            "Only draft or active listings can be cancelled.",
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
@@ -975,41 +1436,141 @@ OTP codes expire after **15 minutes** by default.
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  BIDS
-    // ═══════════════════════════════════════════════════════════════
-    "/bids/mine": {
-      get: {
-        tags: ["Bids"],
-        summary: "Get my bids",
+    "/listings/{id}/publish": {
+      patch: {
+        tags: ["Listings"],
+        summary: "Publish a draft listing",
         description:
-          "Returns all bids placed by the authenticated buyer, newest first, with listing details.",
+          "Publishes a **DRAFT** listing, setting its status to `ACTIVE`. Requires at least one image. Only the seller can publish their own listing.",
         security: BEARER,
-        parameters: paginationQueryParams,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Listing ID.",
+            example: "686a1c4e3f9b2d0012ab34cd",
+          },
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: { listing: { $ref: "#/components/schemas/Listing" } },
+            },
+            "Listing published successfully.",
+          ),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "Only draft listings can be published, or the listing has no images.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/listings/{id}/buy": {
+      post: {
+        tags: ["Listings"],
+        summary: "Buy a listing directly",
+        description: `
+Starts a direct purchase of an **ACTIVE** listing at its listed \`price\`, creating a new **Transaction** in \`PENDING_PAYMENT\` status.
+
+**Next step:** call \`POST /transactions/{id}/checkout\` to get a payment link.
+        `,
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Listing ID.",
+            example: "686a1c4e3f9b2d0012ab34cd",
+          },
+        ],
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: {
+                transaction: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    amount: { type: "number" },
+                    platform_fee: { type: "number" },
+                    seller_amount: { type: "number" },
+                    status: { type: "string", example: "PENDING_PAYMENT" },
+                    created_at: { type: "string", format: "date-time" },
+                  },
+                },
+              },
+            },
+            "Purchase started. Proceed to checkout to complete payment.",
+          ),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "Listing is not available for purchase.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  OFFERS
+    // ═══════════════════════════════════════════════════════════════
+    "/offers/received": {
+      get: {
+        tags: ["Offers"],
+        summary: "Get offers received (seller)",
+        description:
+          "Returns offers made on the authenticated seller's listings, newest first. Optionally filter by `status`.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "status",
+            in: "query",
+            schema: {
+              type: "string",
+              enum: ["PENDING", "ACCEPTED", "COUNTERED", "DECLINED", "WITHDRAWN"],
+            },
+            description: "Filter by offer status.",
+          },
+          ...paginationQueryParams,
+        ],
         responses: {
           "200": ok(
             {
               type: "object",
               properties: {
-                bids: {
+                offers: {
                   type: "array",
-                  items: { $ref: "#/components/schemas/Bid" },
+                  items: { $ref: "#/components/schemas/Offer" },
                 },
               },
             },
-            "Buyer's bids with pagination.",
+            "Offers received with pagination.",
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },
     },
 
-    "/bids/listings/{listingId}/bids": {
+    "/offers/listings/{listingId}/mine": {
       get: {
-        tags: ["Bids"],
-        summary: "Get bids for a listing",
+        tags: ["Offers"],
+        summary: "Get my offer thread for a listing",
         description:
-          "Returns all **PENDING** bids for a listing, sorted by amount descending (highest first). No authentication required.",
+          "Returns the full negotiation thread (offers and counter-offers) between the authenticated buyer and the listing's seller, oldest first.",
+        security: BEARER,
         parameters: [
           {
             name: "listingId",
@@ -1019,33 +1580,35 @@ OTP codes expire after **15 minutes** by default.
             description: "Listing ID.",
             example: "686a1c4e3f9b2d0012ab34cd",
           },
-          ...paginationQueryParams,
         ],
         responses: {
           "200": ok(
             {
               type: "object",
               properties: {
-                bids: {
+                offers: {
                   type: "array",
-                  items: { $ref: "#/components/schemas/Bid" },
+                  items: { $ref: "#/components/schemas/Offer" },
                 },
               },
             },
-            "Bids for the listing.",
+            "Offer thread for the listing.",
           ),
-          "404": { $ref: "#/components/responses/NotFound" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },
-      post: {
-        tags: ["Bids"],
-        summary: "Place a bid",
-        description: `
-Places a bid on a listing. Rules:
+    },
 
-- The listing must be **ACTIVE** and not past its \`ends_at\` date.
-- A seller cannot bid on their own listing.
-- The bid **amount must be strictly higher** than the current highest bid, or higher than \`start_price\` if no bids exist yet.
+    "/offers/listings/{listingId}": {
+      post: {
+        tags: ["Offers"],
+        summary: "Make an offer on a listing",
+        description: `
+Makes an offer on a listing that has \`allow_price_negotiation\` enabled. Rules:
+
+- The listing must be **ACTIVE** and have \`allow_price_negotiation: true\`.
+- A seller cannot make an offer on their own listing.
+- The seller is notified via email and in the listing's conversation thread.
         `,
         security: BEARER,
         parameters: [
@@ -1070,9 +1633,13 @@ Places a bid on a listing. Rules:
                     type: "number",
                     minimum: 0,
                     exclusiveMinimum: true,
-                    example: 270000,
-                    description:
-                      "Bid amount in Naira (NGN). Must exceed the current highest bid or start price.",
+                    example: 230000,
+                    description: "Offer amount in Naira (NGN). Must be greater than 0.",
+                  },
+                  note: {
+                    type: "string",
+                    maxLength: 500,
+                    example: "Can you do ₦230,000? I'll pick up today.",
                   },
                 },
               },
@@ -1083,57 +1650,42 @@ Places a bid on a listing. Rules:
           "201": created(
             {
               type: "object",
-              properties: { bid: { $ref: "#/components/schemas/Bid" } },
+              properties: { offer: { $ref: "#/components/schemas/Offer" } },
             },
-            "Bid placed successfully. Seller is notified via email.",
+            "Offer sent successfully. Seller is notified via email and chat.",
           ),
           "400": errorEnvelope(
             400,
             "BAD_REQUEST",
-            "Bid amount too low, listing ended, or bidding not active.",
+            "Listing is not available for offers, or does not accept price negotiation.",
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
-          "403": errorEnvelope(
-            403,
-            "FORBIDDEN",
-            "Sellers cannot bid on their own listings.",
-          ),
           "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },
 
-    "/bids/listings/{listingId}/bids/{bidId}/accept": {
-      post: {
-        tags: ["Bids"],
-        summary: "Accept a bid (seller only)",
+    "/offers/{id}/accept": {
+      patch: {
+        tags: ["Offers"],
+        summary: "Accept an offer (seller only)",
         description: `
-Accepts a specific bid on the seller's listing. This action:
+Accepts a **PENDING** or **COUNTERED** offer on the seller's listing. This action:
 
-1. Creates a new **Transaction** in \`PENDING_PAYMENT\` status.
-2. Sets the listing status to \`SOLD\`.
-3. Sets the accepted bid to \`ACCEPTED\`.
-4. Rejects all other pending bids on the listing.
-5. Notifies the winning buyer via email with the transaction ID.
+1. Creates a new **Transaction** in \`PENDING_PAYMENT\` status at the offer's amount.
+2. Sets the offer to \`ACCEPTED\` and declines all other pending/countered offers on the listing.
+3. Notifies the buyer via email and in the listing's conversation thread.
 
-Only the **seller** of the listing can accept bids.
+Only the **seller** of the listing can accept offers.
         `,
         security: BEARER,
         parameters: [
           {
-            name: "listingId",
+            name: "id",
             in: "path",
             required: true,
             schema: { type: "string" },
-            description: "Listing ID.",
-            example: "686a1c4e3f9b2d0012ab34cd",
-          },
-          {
-            name: "bidId",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-            description: "Bid ID.",
+            description: "Offer ID.",
             example: "686a1c4e3f9b2d0012ab34ee",
           },
         ],
@@ -1155,12 +1707,12 @@ Only the **seller** of the listing can accept bids.
                 },
               },
             },
-            "Bid accepted. Transaction created.",
+            "Offer accepted. The buyer has been notified to complete payment.",
           ),
           "400": errorEnvelope(
             400,
             "BAD_REQUEST",
-            "Listing is not active or bid is not pending.",
+            "This offer is no longer available.",
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
@@ -1169,29 +1721,130 @@ Only the **seller** of the listing can accept bids.
       },
     },
 
-    "/bids/{bidId}/withdraw": {
-      delete: {
-        tags: ["Bids"],
-        summary: "Withdraw a bid",
+    "/offers/{id}/counter": {
+      patch: {
+        tags: ["Offers"],
+        summary: "Counter an offer (seller only)",
         description:
-          "Withdraws a **PENDING** bid placed by the authenticated buyer. The listing must still be **ACTIVE**.",
+          "Declines the given offer with status `COUNTERED` and creates a new offer (from seller to buyer) referencing it via `parent_offer_id`. Only the **seller** of the listing can counter.",
         security: BEARER,
         parameters: [
           {
-            name: "bidId",
+            name: "id",
             in: "path",
             required: true,
             schema: { type: "string" },
-            description: "Bid ID.",
+            description: "Offer ID being countered.",
+            example: "686a1c4e3f9b2d0012ab34ee",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["amount"],
+                properties: {
+                  amount: {
+                    type: "number",
+                    minimum: 0,
+                    exclusiveMinimum: true,
+                    example: 245000,
+                  },
+                  note: { type: "string", maxLength: 500, example: "Best I can do is ₦245,000." },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: { offer: { $ref: "#/components/schemas/Offer" } },
+            },
+            "Counter offer sent.",
+          ),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "This offer is no longer available.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/offers/{id}/decline": {
+      patch: {
+        tags: ["Offers"],
+        summary: "Decline an offer (seller only)",
+        description:
+          "Declines a **PENDING** or **COUNTERED** offer on the seller's listing. Only the **seller** of the listing can decline.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Offer ID.",
+            example: "686a1c4e3f9b2d0012ab34ee",
+          },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  reason: { type: "string", maxLength: 500, example: "Price is too low for this item." },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": ok(null, "Offer declined."),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "This offer is no longer available.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/offers/{id}/withdraw": {
+      patch: {
+        tags: ["Offers"],
+        summary: "Withdraw an offer (buyer only)",
+        description:
+          "Withdraws a **PENDING** or **COUNTERED** offer placed by the authenticated buyer.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Offer ID.",
             example: "686a1c4e3f9b2d0012ab34ee",
           },
         ],
         responses: {
-          "200": ok(null, "Bid withdrawn successfully."),
+          "200": ok(null, "Offer withdrawn successfully."),
           "400": errorEnvelope(
             400,
             "BAD_REQUEST",
-            "Only pending bids on active listings can be withdrawn.",
+            "Only pending offers can be withdrawn.",
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
@@ -1275,14 +1928,14 @@ Only the **seller** of the listing can accept bids.
       },
     },
 
-    "/transactions/{id}/initiate-payment": {
+    "/transactions/{id}/checkout": {
       post: {
         tags: ["Transactions"],
-        summary: "Initiate payment (buyer)",
+        summary: "Start checkout (buyer)",
         description: `
-Records the buyer's **payment reference** (from their bank transfer or payment provider) against the transaction. After calling this endpoint, the buyer should complete payment using their payment provider with the given reference.
+Creates a **Nomba** checkout session for the transaction and returns a \`checkout_link\` the buyer should be redirected to in order to complete payment.
 
-The platform listens for payment confirmation via the webhook at \`POST /api/webhooks/payment\`.
+The platform confirms payment automatically via the webhook at \`POST /api/webhooks/payment\`.
 
 - Only the **buyer** can call this.
 - Transaction must be in \`PENDING_PAYMENT\` status.
@@ -1298,39 +1951,20 @@ The platform listens for payment confirmation via the webhook at \`POST /api/web
             example: "686a1c4e3f9b2d0012ab3500",
           },
         ],
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                required: ["payment_ref"],
-                properties: {
-                  payment_ref: {
-                    type: "string",
-                    minLength: 1,
-                    example: "PAY-20250701-ABC123",
-                    description:
-                      "Unique payment reference from your bank or payment provider.",
-                  },
-                },
-              },
-            },
-          },
-        },
         responses: {
           "200": ok(
             {
               type: "object",
               properties: {
                 transaction_id: { type: "string" },
-                payment_ref: { type: "string" },
-                amount: { type: "number" },
-                listing_title: { type: "string" },
-                instructions: { type: "string" },
+                checkout_link: {
+                  type: "string",
+                  format: "uri",
+                  example: "https://checkout.nomba.com/pay/abc123",
+                },
               },
             },
-            "Payment reference recorded. Complete payment via your payment provider.",
+            "Checkout session created. Complete payment via the checkout link.",
           ),
           "400": errorEnvelope(
             400,
@@ -1340,55 +1974,7 @@ The platform listens for payment confirmation via the webhook at \`POST /api/web
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
           "404": { $ref: "#/components/responses/NotFound" },
-        },
-      },
-    },
-
-    "/transactions/confirm-payment": {
-      post: {
-        tags: ["Transactions"],
-        summary: "Confirm payment (admin/internal)",
-        description: `
-**Internal / admin endpoint.** Confirms that a payment with the given reference has been received by the platform, updating the transaction status to \`PAID\` and notifying the seller to ship the item.
-
-In production this is triggered automatically by the payment webhook (\`POST /api/webhooks/payment\`). This endpoint exists as a manual override.
-        `,
-        security: BEARER,
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                required: ["payment_ref"],
-                properties: {
-                  payment_ref: {
-                    type: "string",
-                    example: "PAY-20250701-ABC123",
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          "200": ok(
-            {
-              type: "object",
-              properties: {
-                transaction_id: { type: "string" },
-                status: { type: "string", example: "PAID" },
-              },
-            },
-            "Payment confirmed. Seller notified to ship item.",
-          ),
-          "400": errorEnvelope(
-            400,
-            "BAD_REQUEST",
-            "Transaction is not in PENDING_PAYMENT state or payment_ref missing.",
-          ),
-          "401": { $ref: "#/components/responses/Unauthorized" },
-          "404": { $ref: "#/components/responses/NotFound" },
+          "502": errorEnvelope(502, "BAD_GATEWAY", "Payment provider unavailable, please try again."),
         },
       },
     },
@@ -1533,22 +2119,28 @@ The buyer raises a dispute on a transaction, freezing the escrow payment until t
                     example:
                       "Item received was significantly different from the listing description.",
                   },
+                  evidence_urls: {
+                    type: "array",
+                    items: { type: "string", format: "uri" },
+                    maxItems: 6,
+                    description: "Cloudinary URLs returned by `POST /uploads/images`.",
+                  },
                 },
               },
             },
           },
         },
         responses: {
-          "200": ok(
+          "201": created(
             {
               type: "object",
               properties: {
                 transaction_id: { type: "string" },
                 status: { type: "string", example: "DISPUTED" },
-                reason: { type: "string" },
+                dispute_id: { type: "string" },
               },
             },
-            "Dispute raised. Platform team notified.",
+            "Dispute raised. Platform team notified. Payment is held until resolved.",
           ),
           "400": errorEnvelope(
             400,
@@ -1560,25 +2152,1285 @@ The buyer raises a dispute on a transaction, freezing the escrow payment until t
           "404": { $ref: "#/components/responses/NotFound" },
         },
       },
+      get: {
+        tags: ["Transactions"],
+        summary: "Get the dispute on a transaction",
+        description:
+          "Returns the dispute raised against the transaction, if any. Accessible by either the **buyer** or **seller**.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Transaction ID.",
+            example: "686a1c4e3f9b2d0012ab3500",
+          },
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: { dispute: { $ref: "#/components/schemas/Dispute" } },
+            },
+            "Dispute details.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": errorEnvelope(404, "NOT_FOUND", "No dispute exists for this transaction."),
+        },
+      },
+    },
+
+    "/transactions/{id}/reviews": {
+      post: {
+        tags: ["Reviews"],
+        summary: "Leave a review for a transaction",
+        description: `
+Leaves a rating and optional comment for the other party (buyer or seller) on a completed transaction.
+
+- Transaction must be in \`RELEASED\` status.
+- Only the **buyer** or **seller** of the transaction can review, and each may review once.
+        `,
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Transaction ID.",
+            example: "686a1c4e3f9b2d0012ab3500",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["rating"],
+                properties: {
+                  rating: { type: "integer", minimum: 1, maximum: 5, example: 5 },
+                  comment: {
+                    type: "string",
+                    maxLength: 1000,
+                    example: "Fast shipping, item exactly as described.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: { review: { $ref: "#/components/schemas/Review" } },
+            },
+            "Review submitted.",
+          ),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "Reviews can only be left after payment has been released.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": errorEnvelope(409, "CONFLICT", "You have already reviewed this transaction."),
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CATEGORIES
+    // ═══════════════════════════════════════════════════════════════
+    "/categories": {
+      get: {
+        tags: ["Categories"],
+        summary: "List categories",
+        description:
+          "Returns all active categories, sorted alphabetically. Categories are seeded and managed by the TradeNG team — there is no public create/update endpoint.",
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                categories: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Category" },
+                },
+              },
+            },
+            "Active categories.",
+          ),
+        },
+      },
+    },
+
+    "/categories/{id}": {
+      get: {
+        tags: ["Categories"],
+        summary: "Get a category",
+        description: "Returns a single active category by ID.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Category ID.",
+            example: "686a1c4e3f9b2d0012ab3600",
+          },
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: { category: { $ref: "#/components/schemas/Category" } },
+            },
+            "Category details.",
+          ),
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/categories/requests": {
+      post: {
+        tags: ["Categories"],
+        summary: "Request a new category",
+        description:
+          "Submits a request for a new category that doesn't exist yet. The TradeNG team reviews requests and creates approved categories manually; the requester is notified once resolved.",
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name", "reason"],
+                properties: {
+                  name: {
+                    type: "string",
+                    minLength: 2,
+                    maxLength: 60,
+                    example: "Vintage Vinyl Records",
+                  },
+                  reason: {
+                    type: "string",
+                    minLength: 10,
+                    maxLength: 500,
+                    example: "There's no category for collectible vinyl records and turntables.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: { category_request: { $ref: "#/components/schemas/CategoryRequest" } },
+            },
+            "Category request submitted. We'll review it and notify you once it's created.",
+          ),
+          "400": { $ref: "#/components/responses/ValidationError" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/categories/requests/mine": {
+      get: {
+        tags: ["Categories"],
+        summary: "Get my category requests",
+        description:
+          "Returns all category requests submitted by the authenticated user, newest first.",
+        security: BEARER,
+        parameters: paginationQueryParams,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                category_requests: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/CategoryRequest" },
+                },
+              },
+            },
+            "Category requests with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  UPLOADS
+    // ═══════════════════════════════════════════════════════════════
+    "/uploads/images": {
+      post: {
+        tags: ["Uploads"],
+        summary: "Upload listing images",
+        description:
+          "Uploads up to 8 image files to Cloudinary and returns their URLs, for use in `Listing.images` or `Dispute.evidence_urls`.",
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                required: ["images"],
+                properties: {
+                  images: {
+                    type: "array",
+                    items: { type: "string", format: "binary" },
+                    maxItems: 8,
+                    description: "Up to 8 image files (field name `images`).",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: {
+                images: {
+                  type: "array",
+                  items: { type: "string", format: "uri" },
+                  example: ["https://res.cloudinary.com/tradeng/uploads/img1.jpg"],
+                },
+              },
+            },
+            "Images uploaded successfully.",
+          ),
+          "400": errorEnvelope(400, "BAD_REQUEST", "At least one image file is required."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "502": errorEnvelope(502, "BAD_GATEWAY", "Media upload failed, please retry."),
+        },
+      },
+    },
+
+    "/uploads/video": {
+      post: {
+        tags: ["Uploads"],
+        summary: "Upload a listing video",
+        description:
+          "Uploads a single video file to Cloudinary and returns its URL, for use in `Listing.video`.",
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                required: ["video"],
+                properties: {
+                  video: {
+                    type: "string",
+                    format: "binary",
+                    description: "A single video file (field name `video`).",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: {
+                video: {
+                  type: "string",
+                  format: "uri",
+                  example: "https://res.cloudinary.com/tradeng/uploads/video1.mp4",
+                },
+              },
+            },
+            "Video uploaded successfully.",
+          ),
+          "400": errorEnvelope(400, "BAD_REQUEST", "A video file is required."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "502": errorEnvelope(502, "BAD_GATEWAY", "Media upload failed, please retry."),
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  WALLET
+    // ═══════════════════════════════════════════════════════════════
+    "/wallet": {
+      get: {
+        tags: ["Wallet"],
+        summary: "Get my wallet balances",
+        description:
+          "Returns the authenticated user's available and escrow balances, computed from the wallet ledger.",
+        security: BEARER,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: { wallet: { $ref: "#/components/schemas/Wallet" } },
+            },
+            "Wallet balances.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/wallet/ledger": {
+      get: {
+        tags: ["Wallet"],
+        summary: "Get my wallet ledger",
+        description:
+          "Returns the authenticated user's wallet ledger entries (escrow holds/releases, withdrawal holds/reversals), newest first.",
+        security: BEARER,
+        parameters: paginationQueryParams,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                ledger: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/WalletLedgerEntry" },
+                },
+              },
+            },
+            "Wallet ledger with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/wallet/payout-banks": {
+      get: {
+        tags: ["Wallet"],
+        summary: "Get my payout banks",
+        description:
+          "Returns the authenticated user's saved payout bank accounts, default first.",
+        security: BEARER,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                payout_banks: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/PayoutBank" },
+                },
+              },
+            },
+            "Payout banks.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        tags: ["Wallet"],
+        summary: "Add a payout bank",
+        description:
+          "Adds a bank account for withdrawals. The first bank added for a user is automatically set as `is_default`.",
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["bank_name", "account_number", "account_name"],
+                properties: {
+                  bank_name: { type: "string", minLength: 2, maxLength: 100, example: "Guaranty Trust Bank" },
+                  account_number: {
+                    type: "string",
+                    minLength: 10,
+                    maxLength: 10,
+                    example: "0123456789",
+                  },
+                  account_name: { type: "string", minLength: 2, maxLength: 100, example: "Adeola Bello" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: { payout_bank: { $ref: "#/components/schemas/PayoutBank" } },
+            },
+            "Payout bank added.",
+          ),
+          "400": { $ref: "#/components/responses/ValidationError" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/wallet/payout-banks/{id}": {
+      delete: {
+        tags: ["Wallet"],
+        summary: "Remove a payout bank",
+        description: "Removes a saved payout bank belonging to the authenticated user.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Payout bank ID.",
+            example: "686a1c4e3f9b2d0012ab3900",
+          },
+        ],
+        responses: {
+          "200": ok(null, "Payout bank removed."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/wallet/withdrawals": {
+      get: {
+        tags: ["Wallet"],
+        summary: "Get my withdrawal requests",
+        description:
+          "Returns the authenticated user's withdrawal requests, newest first.",
+        security: BEARER,
+        parameters: paginationQueryParams,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                withdrawals: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/WithdrawalRequest" },
+                },
+              },
+            },
+            "Withdrawal requests with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        tags: ["Wallet"],
+        summary: "Request a withdrawal",
+        description: `
+Requests a withdrawal of \`amount\` from the available balance to a saved payout bank. This immediately places a \`WITHDRAWAL_HOLD\` on the wallet ledger; the withdrawal is completed manually by the TradeNG team.
+
+- \`amount\` must be at least the platform minimum withdrawal amount.
+- \`amount\` cannot exceed the current \`available_balance\`.
+        `,
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["amount", "payout_bank_id"],
+                properties: {
+                  amount: {
+                    type: "number",
+                    minimum: 0,
+                    exclusiveMinimum: true,
+                    example: 100000,
+                  },
+                  payout_bank_id: { type: "string", example: "686a1c4e3f9b2d0012ab3900" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: { withdrawal: { $ref: "#/components/schemas/WithdrawalRequest" } },
+            },
+            "Withdrawal request submitted.",
+          ),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "Amount is below the minimum withdrawal amount, or exceeds available balance.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": errorEnvelope(404, "NOT_FOUND", "Payout bank not found."),
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ORDERS
+    // ═══════════════════════════════════════════════════════════════
+    "/orders/buying": {
+      get: {
+        tags: ["Orders"],
+        summary: "Get my orders as a buyer",
+        description:
+          "Returns a read-only, buyer-facing view of the authenticated user's transactions, each including a computed `timeline` of key lifecycle events.",
+        security: BEARER,
+        parameters: paginationQueryParams,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                orders: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Order" },
+                },
+              },
+            },
+            "Buying orders with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/orders/selling": {
+      get: {
+        tags: ["Orders"],
+        summary: "Get my orders as a seller",
+        description:
+          "Returns a read-only, seller-facing view of the authenticated user's transactions, each including a computed `timeline` of key lifecycle events.",
+        security: BEARER,
+        parameters: paginationQueryParams,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                orders: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Order" },
+                },
+              },
+            },
+            "Selling orders with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CONVERSATIONS
+    // ═══════════════════════════════════════════════════════════════
+    "/conversations": {
+      get: {
+        tags: ["Conversations"],
+        summary: "Get my conversations",
+        description:
+          "Returns the authenticated user's conversations (as buyer or seller), most recently active first.",
+        security: BEARER,
+        parameters: paginationQueryParams,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                conversations: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Conversation" },
+                },
+              },
+            },
+            "Conversations with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+      post: {
+        tags: ["Conversations"],
+        summary: "Start (or get) a conversation about a listing",
+        description:
+          "Gets or creates a conversation between the authenticated buyer and the listing's seller. A buyer cannot message their own listing.",
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["listing_id"],
+                properties: {
+                  listing_id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: { conversation: { $ref: "#/components/schemas/Conversation" } },
+            },
+            "Conversation ready.",
+          ),
+          "400": errorEnvelope(400, "BAD_REQUEST", "You cannot message yourself."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/conversations/{id}/messages": {
+      get: {
+        tags: ["Conversations"],
+        summary: "Get messages in a conversation",
+        description:
+          "Returns messages in a conversation, newest first. Only accessible by conversation participants.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Conversation ID.",
+            example: "686a1c4e3f9b2d0012ab3b00",
+          },
+          ...paginationQueryParams,
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                messages: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Message" },
+                },
+              },
+            },
+            "Messages with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+      post: {
+        tags: ["Conversations"],
+        summary: "Send a message (REST fallback)",
+        description:
+          "Sends a text message in a conversation. This is a REST fallback for clients not connected via Socket.io — the message is also broadcast in real time to the `message:new` socket event.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Conversation ID.",
+            example: "686a1c4e3f9b2d0012ab3b00",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["body"],
+                properties: {
+                  body: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 2000,
+                    example: "Is this still available?",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created(
+            {
+              type: "object",
+              properties: { message: { $ref: "#/components/schemas/Message" } },
+            },
+            "Message sent.",
+          ),
+          "400": { $ref: "#/components/responses/ValidationError" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/conversations/{id}/read": {
+      patch: {
+        tags: ["Conversations"],
+        summary: "Mark a conversation as read",
+        description:
+          "Marks all messages from the other participant in the conversation as read.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Conversation ID.",
+            example: "686a1c4e3f9b2d0012ab3b00",
+          },
+        ],
+        responses: {
+          "200": ok(null, "Conversation marked as read."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  NOTIFICATIONS
+    // ═══════════════════════════════════════════════════════════════
+    "/notifications": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Get my notifications",
+        description:
+          "Returns the authenticated user's notifications, unread notifications first, then newest first.",
+        security: BEARER,
+        parameters: paginationQueryParams,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                notifications: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Notification" },
+                },
+              },
+            },
+            "Notifications with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/notifications/unread-count": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Get unread notification count",
+        description: "Returns the number of unread notifications for the authenticated user.",
+        security: BEARER,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: { unread_count: { type: "integer", example: 3 } },
+            },
+            "Unread notification count.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/notifications/read-all": {
+      patch: {
+        tags: ["Notifications"],
+        summary: "Mark all notifications as read",
+        description: "Marks all of the authenticated user's unread notifications as read.",
+        security: BEARER,
+        responses: {
+          "200": ok(null, "All notifications marked as read."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/notifications/{id}/read": {
+      patch: {
+        tags: ["Notifications"],
+        summary: "Mark a notification as read",
+        description: "Marks a single notification belonging to the authenticated user as read.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Notification ID.",
+            example: "686a1c4e3f9b2d0012ab3d00",
+          },
+        ],
+        responses: {
+          "200": ok(null, "Notification marked as read."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  PROFILE
+    // ═══════════════════════════════════════════════════════════════
+    "/profile/me": {
+      get: {
+        tags: ["Profile"],
+        summary: "Get my profile",
+        description: "Returns the authenticated user's full profile.",
+        security: BEARER,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: { user: { $ref: "#/components/schemas/UserProfile" } },
+            },
+            "Profile details.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+      patch: {
+        tags: ["Profile"],
+        summary: "Update my profile",
+        description: "Partially updates the authenticated user's profile.",
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  first_name: { type: "string", minLength: 1, maxLength: 50 },
+                  last_name: { type: "string", minLength: 1, maxLength: 50 },
+                  phone_number: { type: "string", minLength: 7, maxLength: 20, example: "+2348012345678" },
+                  about: { type: "string", maxLength: 500 },
+                  address: { type: "string", maxLength: 300 },
+                  profile_photo: {
+                    type: "string",
+                    format: "uri",
+                    description: "Cloudinary URL returned by `POST /uploads/images`.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: { user: { $ref: "#/components/schemas/UserProfile" } },
+            },
+            "Profile updated.",
+          ),
+          "400": { $ref: "#/components/responses/ValidationError" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+      delete: {
+        tags: ["Profile"],
+        summary: "Delete my account",
+        description: "Marks the authenticated user's account as `DELETED`.",
+        security: BEARER,
+        responses: {
+          "200": ok(null, "Account deleted."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/profile/stats": {
+      get: {
+        tags: ["Profile"],
+        summary: "Get my seller stats",
+        description:
+          "Returns summary statistics for the authenticated user as a seller: total listings, items sold, average rating, and total earnings.",
+        security: BEARER,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                total_listings: { type: "integer", example: 12 },
+                items_sold: { type: "integer", example: 8 },
+                avg_rating: { type: "number", example: 4.6 },
+                earnings: { type: "number", example: 950000 },
+              },
+            },
+            "Seller stats.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/profile/trust-score": {
+      get: {
+        tags: ["Profile"],
+        summary: "Get my trust score",
+        description:
+          "Returns a computed trust score (0–100) for the authenticated user based on review average, completed transaction volume, seller verification status, account age, and dispute rate.",
+        security: BEARER,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                verification_status: {
+                  type: "string",
+                  enum: ["EMAIL_VERIFIED", "SELLER_VERIFIED"],
+                  example: "EMAIL_VERIFIED",
+                },
+                review_average: { type: "number", example: 4.6 },
+                review_count: { type: "integer", example: 14 },
+                completed_transactions_count: { type: "integer", example: 22 },
+                account_age_days: { type: "integer", example: 92 },
+                dispute_rate: { type: "number", example: 0.02 },
+                score: { type: "integer", example: 78 },
+              },
+            },
+            "Trust score breakdown.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/profile/verify": {
+      post: {
+        tags: ["Profile"],
+        summary: "Request seller verification",
+        description:
+          "Submits a request for seller verification, reviewed manually by the TradeNG team. Can only be requested once while pending.",
+        security: BEARER,
+        responses: {
+          "200": ok(null, "Verification request submitted. We'll review and notify you."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "409": errorEnvelope(
+            409,
+            "CONFLICT",
+            "You are already a verified seller, or a verification request is already pending review.",
+          ),
+        },
+      },
+    },
+
+    "/profile/password": {
+      patch: {
+        tags: ["Profile"],
+        summary: "Update my password",
+        description: "Updates the authenticated user's password after verifying the current one.",
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["current_password", "new_password"],
+                properties: {
+                  current_password: { type: "string", example: "Secret123" },
+                  new_password: {
+                    type: "string",
+                    minLength: 8,
+                    example: "NewSecret123",
+                    description:
+                      "Must be at least 8 characters, contain one uppercase letter and one number.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": ok(null, "Password updated successfully."),
+          "400": { $ref: "#/components/responses/ValidationError" },
+          "401": errorEnvelope(401, "UNAUTHORIZED", "Current password is incorrect."),
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+    },
+
+    "/profile/notification-settings": {
+      patch: {
+        tags: ["Profile"],
+        summary: "Update my notification settings",
+        description:
+          "Partially updates the authenticated user's email and in-app notification preferences.",
+        security: BEARER,
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  email_general: { type: "boolean" },
+                  email_offers: { type: "boolean" },
+                  in_app_general: { type: "boolean" },
+                  in_app_offers: { type: "boolean" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                notification_settings: { $ref: "#/components/schemas/NotificationSettings" },
+              },
+            },
+            "Notification settings updated.",
+          ),
+          "400": { $ref: "#/components/responses/ValidationError" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/profile/wishlist": {
+      get: {
+        tags: ["Profile"],
+        summary: "Get my wishlist",
+        description:
+          "Returns listings the authenticated user has added to their wishlist, newest first.",
+        security: BEARER,
+        parameters: paginationQueryParams,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                wishlist: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", example: "686a1c4e3f9b2d0012ab3f00" },
+                      listing: { $ref: "#/components/schemas/Listing" },
+                    },
+                  },
+                },
+              },
+            },
+            "Wishlist with pagination.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/profile/wishlist/{listingId}": {
+      post: {
+        tags: ["Profile"],
+        summary: "Add a listing to my wishlist",
+        description: "Adds a listing to the authenticated user's wishlist. Idempotent.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "listingId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Listing ID.",
+            example: "686a1c4e3f9b2d0012ab34cd",
+          },
+        ],
+        responses: {
+          "201": created({ nullable: true, example: null }, "Added to wishlist."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
+      delete: {
+        tags: ["Profile"],
+        summary: "Remove a listing from my wishlist",
+        description: "Removes a listing from the authenticated user's wishlist. Idempotent.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "listingId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Listing ID.",
+            example: "686a1c4e3f9b2d0012ab34cd",
+          },
+        ],
+        responses: {
+          "200": ok(null, "Removed from wishlist."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  REVIEWS
+    // ═══════════════════════════════════════════════════════════════
+    "/users/{userId}/reviews": {
+      get: {
+        tags: ["Reviews"],
+        summary: "Get reviews for a user",
+        description:
+          "Returns reviews received by a user (as buyer or seller), newest first. No authentication required.",
+        parameters: [
+          {
+            name: "userId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "User ID.",
+            example: "686a1c4e3f9b2d0012ab34cd",
+          },
+          ...paginationQueryParams,
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                reviews: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Review" },
+                },
+              },
+            },
+            "Reviews with pagination.",
+          ),
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SUPPORT
+    // ═══════════════════════════════════════════════════════════════
+    "/support/contact": {
+      post: {
+        tags: ["Support"],
+        summary: "Contact support",
+        description:
+          "Submits a support enquiry. The message is persisted and forwarded to the TradeNG support team; the sender receives an email receipt. No authentication required.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name", "email", "subject", "message"],
+                properties: {
+                  name: { type: "string", minLength: 1, maxLength: 100, example: "Adeola Bello" },
+                  email: {
+                    type: "string",
+                    format: "email",
+                    example: "adeola@example.com",
+                  },
+                  subject: {
+                    type: "string",
+                    minLength: 3,
+                    maxLength: 150,
+                    example: "Question about a withdrawal",
+                  },
+                  message: {
+                    type: "string",
+                    minLength: 10,
+                    maxLength: 2000,
+                    example: "My withdrawal has been pending for 3 days, can you check on it?",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": created({ nullable: true, example: null }, "Your message has been received. We'll get back to you shortly."),
+          "400": { $ref: "#/components/responses/ValidationError" },
+        },
+      },
     },
   },
 
   tags: [
     {
       name: "Auth",
-      description: "User registration, email verification, and authentication.",
+      description: "User registration, email verification, password reset, and authentication.",
     },
     {
       name: "Listings",
-      description: "Create and manage marketplace listings.",
+      description: "Create and manage marketplace listings — drafts, publishing, browsing, and direct purchase.",
     },
     {
-      name: "Bids",
-      description: "Place, browse, and manage bids on listings.",
+      name: "Offers",
+      description: "Negotiate a listing's price via an offer/counter-offer thread between buyer and seller.",
     },
     {
       name: "Transactions",
-      description: "Escrow transaction lifecycle management.",
+      description: "Escrow transaction lifecycle management — checkout, receipt confirmation, release, and disputes.",
+    },
+    {
+      name: "Categories",
+      description:
+        "Browse marketplace categories and request new ones. Categories are seeded and managed by the TradeNG team — there is no public create/update endpoint.",
+    },
+    {
+      name: "Uploads",
+      description: "Upload listing images and video to Cloudinary ahead of creating or updating a listing.",
+    },
+    {
+      name: "Wallet",
+      description: "View wallet balances and ledger, manage payout banks, and request withdrawals.",
+    },
+    {
+      name: "Orders",
+      description: "Read-only buyer/seller order views over transactions, with a computed lifecycle timeline.",
+    },
+    {
+      name: "Conversations",
+      description:
+        "Buyer–seller messaging tied to a listing. In addition to the REST endpoints below, real-time delivery happens over Socket.io on the same server. Connect with `{ auth: { token: \"<jwt>\" } }` in the socket handshake, then use events `conversation:join`, `message:send`, `message:new`, `typing:start`, `typing:stop`, and `notification:new`.",
+    },
+    {
+      name: "Notifications",
+      description: "In-app notifications for offers, payments, disputes, reviews, messages, and more.",
+    },
+    {
+      name: "Profile",
+      description: "Manage the authenticated user's profile, stats, trust score, verification, and wishlist.",
+    },
+    {
+      name: "Reviews",
+      description: "Leave and browse ratings and reviews left between buyers and sellers after a completed transaction.",
+    },
+    {
+      name: "Support",
+      description: "Contact the TradeNG support team.",
     },
   ],
 };

@@ -18,6 +18,7 @@ export interface ITransaction extends Document {
   seller_amount: number;
   payment_ref: string | null;
   status: TransactionStatus;
+  dispute_id: Types.ObjectId | null;
   receipt_confirmed_at: Date | null;
   auto_release_at: Date | null;
   released_at: Date | null;
@@ -39,6 +40,7 @@ const transactionSchema = new Schema<ITransaction>(
       enum: ["PENDING_PAYMENT", "PAID", "RECEIPT_CONFIRMED", "RELEASED", "DISPUTED", "REFUNDED"],
       default: "PENDING_PAYMENT",
     },
+    dispute_id: { type: Schema.Types.ObjectId, ref: "Dispute", default: null },
     receipt_confirmed_at: { type: Date, default: null },
     auto_release_at: { type: Date, default: null },
     released_at: { type: Date, default: null },

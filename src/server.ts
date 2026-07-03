@@ -1,7 +1,9 @@
+import { createServer } from "http";
 import "@/config/env";
 import app from "@/app";
 import { connectDB } from "@/config/db";
 import { startScheduler } from "@/lib/scheduler";
+import { initSocket } from "@/lib/socket";
 import { env } from "@/config/env";
 
 process.on("uncaughtException", (err) => {
@@ -18,12 +20,16 @@ const main = async (): Promise<void> => {
 
   startScheduler();
 
-  app.listen(env.PORT, () => {
+  const httpServer = createServer(app);
+  initSocket(httpServer);
+
+  httpServer.listen(env.PORT, () => {
     const origin = env.APP_URL;
     console.log(`[Server] Running at ${origin}`);
     console.log(`[Server] API base: ${origin}/api/${env.API_VERSION}`);
     console.log(`[Server] Webhooks: ${origin}/api/webhooks/payment`);
     console.log(`[Server] API docs: ${origin}/api/docs`);
+    console.log(`[Server] Socket.io ready for real-time chat`);
   });
 };
 

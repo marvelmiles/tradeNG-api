@@ -7,6 +7,7 @@ import { sendError } from "@/utils/response";
 const app: Application = express();
 
 app.use(cors());
+app.use("/api/webhooks", express.raw({ type: "application/json" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

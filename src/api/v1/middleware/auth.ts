@@ -42,6 +42,10 @@ export const requireAuth = async (
       throw new AppError("Your account has been suspended", 403);
     }
 
+    if (user.status === "DELETED") {
+      throw new AppError("Account not found", 401);
+    }
+
     req.user = {
       id: user._id.toString(),
       email: user.email,

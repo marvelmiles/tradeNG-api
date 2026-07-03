@@ -129,34 +129,34 @@ export const EmailService = {
         `<p>Hi <strong>${user.first_name}</strong>,</p>
         <p>Your account is verified and you're all set! Welcome to ${env.APP_NAME} — the safest way to buy and sell.</p>
         <ul>
-          <li><strong>Sell:</strong> List any item and set a starting price.</li>
-          <li><strong>Bid:</strong> Browse listings and place bids on items you love.</li>
+          <li><strong>Sell:</strong> List any item, new or used, and set your price.</li>
+          <li><strong>Buy:</strong> Browse listings, make offers, or buy instantly.</li>
           <li><strong>Safe payments:</strong> We hold money securely until you confirm receipt.</li>
         </ul>`,
       ),
     });
   },
 
-  async sendBidPlaced(
+  async sendOfferPlaced(
     seller_email: string,
     seller_name: string,
-    bidder_name: string,
+    buyer_name: string,
     listing_title: string,
     amount: number,
   ) {
     await send({
       to: seller_email,
-      subject: `New bid on your listing: ${listing_title}`,
+      subject: `New offer on your listing: ${listing_title}`,
       html: base(
-        "New Bid Received",
+        "New Offer Received",
         `<p>Hi <strong>${seller_name}</strong>,</p>
-        <p><strong>${bidder_name}</strong> just placed a bid of <strong>₦${amount.toLocaleString()}</strong> on your listing "<strong>${listing_title}</strong>".</p>
-        <p>Log in to review the bid and decide whether to accept it.</p>`,
+        <p><strong>${buyer_name}</strong> just offered <strong>₦${amount.toLocaleString()}</strong> for your listing "<strong>${listing_title}</strong>".</p>
+        <p>Log in to accept, counter, or decline the offer.</p>`,
       ),
     });
   },
 
-  async sendBidAccepted(
+  async sendOfferAccepted(
     buyer_email: string,
     buyer_name: string,
     listing_title: string,
@@ -165,13 +165,48 @@ export const EmailService = {
   ) {
     await send({
       to: buyer_email,
-      subject: `Your bid was accepted — complete payment for "${listing_title}"`,
+      subject: `Your offer was accepted — complete payment for "${listing_title}"`,
       html: base(
-        "Bid Accepted",
+        "Offer Accepted",
         `<p>Hi <strong>${buyer_name}</strong>,</p>
-        <p>Your bid of <strong>₦${amount.toLocaleString()}</strong> on "<strong>${listing_title}</strong>" has been accepted.</p>
+        <p>Your offer of <strong>₦${amount.toLocaleString()}</strong> on "<strong>${listing_title}</strong>" has been accepted.</p>
         <p>Please complete payment to secure your item.</p>
         <p><strong>Transaction ID:</strong> ${transaction_id}</p>`,
+      ),
+    });
+  },
+
+  async sendOfferCountered(
+    buyer_email: string,
+    buyer_name: string,
+    listing_title: string,
+    amount: number,
+  ) {
+    await send({
+      to: buyer_email,
+      subject: `Seller countered your offer on "${listing_title}"`,
+      html: base(
+        "Offer Countered",
+        `<p>Hi <strong>${buyer_name}</strong>,</p>
+        <p>The seller countered your offer with <strong>₦${amount.toLocaleString()}</strong> on "<strong>${listing_title}</strong>".</p>
+        <p>Log in to accept, counter again, or decline.</p>`,
+      ),
+    });
+  },
+
+  async sendOfferDeclined(
+    buyer_email: string,
+    buyer_name: string,
+    listing_title: string,
+  ) {
+    await send({
+      to: buyer_email,
+      subject: `Your offer on "${listing_title}" was declined`,
+      html: base(
+        "Offer Declined",
+        `<p>Hi <strong>${buyer_name}</strong>,</p>
+        <p>The seller declined your offer on "<strong>${listing_title}</strong>".</p>
+        <p>Feel free to browse other listings or make a new offer.</p>`,
       ),
     });
   },
@@ -229,6 +264,92 @@ export const EmailService = {
         `<p>Hi <strong>${seller_name}</strong>,</p>
         <p>Your payment of <strong>₦${seller_amount.toLocaleString()}</strong> for "<strong>${listing_title}</strong>" has been released.</p>
         <p>Thank you for selling on ${env.APP_NAME}!</p>`,
+      ),
+    });
+  },
+
+  async sendCategoryApproved(user_email: string, user_name: string, category_name: string) {
+    await send({
+      to: user_email,
+      subject: `Your category request "${category_name}" was approved`,
+      html: base(
+        "Category Request Approved",
+        `<p>Hi <strong>${user_name}</strong>,</p>
+        <p>Good news! The category "<strong>${category_name}</strong>" you requested is now available. You can select it when listing an item.</p>`,
+      ),
+    });
+  },
+
+  async sendWithdrawalUpdate(user_email: string, user_name: string, amount: number, status: "COMPLETED" | "REJECTED") {
+    const is_completed = status === "COMPLETED";
+    await send({
+      to: user_email,
+      subject: is_completed
+        ? `Withdrawal of ₦${amount.toLocaleString()} completed`
+        : `Withdrawal of ₦${amount.toLocaleString()} was rejected`,
+      html: base(
+        "Withdrawal Update",
+        `<p>Hi <strong>${user_name}</strong>,</p>
+        <p>${
+          is_completed
+            ? `Your withdrawal of <strong>₦${amount.toLocaleString()}</strong> has been sent to your bank account.`
+            : `Your withdrawal request of <strong>₦${amount.toLocaleString()}</strong> was rejected and the amount has been returned to your available balance.`
+        }</p>`,
+      ),
+    });
+  },
+
+  async sendDisputeResolved(
+    user_email: string,
+    user_name: string,
+    listing_title: string,
+    resolution_note: string | null,
+  ) {
+    await send({
+      to: user_email,
+      subject: `Dispute resolved for "${listing_title}"`,
+      html: base(
+        "Dispute Resolved",
+        `<p>Hi <strong>${user_name}</strong>,</p>
+        <p>The dispute on "<strong>${listing_title}</strong>" has been resolved.</p>
+        ${resolution_note ? `<p><strong>Resolution note:</strong> ${resolution_note}</p>` : ""}`,
+      ),
+    });
+  },
+
+  async sendVerifiedSellerApproved(user_email: string, user_name: string) {
+    await send({
+      to: user_email,
+      subject: `You're now a verified seller on ${env.APP_NAME}!`,
+      html: base(
+        "Verified Seller",
+        `<p>Hi <strong>${user_name}</strong>,</p>
+        <p>Congratulations! Your seller verification request has been approved. Buyers will now see a verified badge on your listings.</p>`,
+      ),
+    });
+  },
+
+  async sendSupportNotification(name: string, email: string, subject: string, message: string) {
+    await send({
+      to: env.SUPPORT_INBOX_EMAIL,
+      subject: `[Support] ${subject}`,
+      html: base(
+        "New Support Message",
+        `<p><strong>From:</strong> ${name} (${email})</p>
+        <p><strong>Subject:</strong> ${subject}</p>
+        <p>${message}</p>`,
+      ),
+    });
+  },
+
+  async sendSupportContactReceipt(user_email: string, user_name: string) {
+    await send({
+      to: user_email,
+      subject: `We received your message`,
+      html: base(
+        "Message Received",
+        `<p>Hi <strong>${user_name}</strong>,</p>
+        <p>Thanks for reaching out to ${env.APP_NAME} support. We've received your message and will get back to you shortly.</p>`,
       ),
     });
   },

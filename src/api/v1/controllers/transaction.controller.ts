@@ -11,11 +11,15 @@ import {
   buildCursorFilter,
 } from "@/utils/pagination";
 import { Transaction, ITransaction } from "@/models/v1/transaction.model";
+import { Dispute } from "@/models/v1/dispute.model";
 import { EmailService } from "@/api/v1/services/email.service";
-import type { InitiatePaymentInput, DisputeInput } from "@/api/v1/validators/transaction";
+import { recordEscrowRelease } from "@/api/v1/services/wallet.service";
+import { createNotification } from "@/api/v1/services/notification.service";
+import { createCheckoutOrder } from "@/lib/nomba";
+import type { DisputeInput } from "@/api/v1/validators/transaction";
 
 type LeanUser = { _id: Types.ObjectId; first_name: string; last_name: string; email?: string };
-type LeanListing = { _id: Types.ObjectId; title: string; condition: string };
+type LeanListing = { _id: Types.ObjectId; item_name: string; condition: string };
 
 type LeanTransaction = Omit<ITransaction, "listing_id" | "buyer_id" | "seller_id"> & {
   _id: Types.ObjectId;
@@ -29,7 +33,7 @@ const formatTransaction = (tx: LeanTransaction) => {
 
   const listing =
     listing_id && !(listing_id instanceof Types.ObjectId)
-      ? { id: (listing_id as LeanListing)._id.toString(), title: (listing_id as LeanListing).title, condition: (listing_id as LeanListing).condition }
+      ? { id: (listing_id as LeanListing)._id.toString(), item_name: (listing_id as LeanListing).item_name, condition: (listing_id as LeanListing).condition }
       : null;
 
   const buyer =
@@ -45,6 +49,7 @@ const formatTransaction = (tx: LeanTransaction) => {
   return {
     id: _id.toString(),
     ...rest,
+    dispute_id: rest.dispute_id?.toString() ?? null,
     ...(listing ? { listing } : {}),
     ...(buyer ? { buyer } : {}),
     ...(seller ? { seller } : {}),
@@ -56,7 +61,7 @@ export const getTransaction = asyncHandler(async (req: Request, res: Response) =
   const user_id = req.user!.id;
 
   const tx = await Transaction.findById(id)
-    .populate<{ listing_id: LeanListing }>("listing_id", "title condition")
+    .populate<{ listing_id: LeanListing }>("listing_id", "item_name condition")
     .populate<{ buyer_id: LeanUser }>("buyer_id", "first_name last_name")
     .populate<{ seller_id: LeanUser }>("seller_id", "first_name last_name")
     .lean();
@@ -89,7 +94,7 @@ export const getMyTransactions = asyncHandler(async (req: Request, res: Response
       : { $or: [{ buyer_id: user_id }, { seller_id: user_id }] };
 
   const populateOptions = [
-    { path: "listing_id", select: "title condition" },
+    { path: "listing_id", select: "item_name condition" },
     { path: "buyer_id", select: "first_name last_name" },
     { path: "seller_id", select: "first_name last_name" },
   ];
@@ -129,14 +134,11 @@ export const getMyTransactions = asyncHandler(async (req: Request, res: Response
   });
 });
 
-export const initiatePayment = asyncHandler(async (req: Request, res: Response) => {
+export const checkoutTransaction = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { payment_ref } = req.body as InitiatePaymentInput;
   const user_id = req.user!.id;
 
-  const tx = await Transaction.findById(id)
-    .populate<{ listing_id: LeanListing }>("listing_id", "title")
-    .lean();
+  const tx = await Transaction.findById(id).lean();
 
   if (!tx) throw new AppError("Transaction not found", 404);
   if (tx.buyer_id.toString() !== user_id) throw new AppError("Forbidden", 403);
@@ -144,54 +146,24 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
     throw new AppError("Payment has already been initiated or completed", 400);
   }
 
-  await Transaction.findByIdAndUpdate(id, { payment_ref });
-
-  return sendSuccess({
-    res,
-    message: "Payment reference recorded. Complete payment via your payment provider.",
-    data: {
-      transaction_id: id,
-      payment_ref,
+  let checkout;
+  try {
+    checkout = await createCheckoutOrder({
+      order_reference: tx._id.toString(),
       amount: tx.amount,
-      listing_title: (tx.listing_id as LeanListing).title,
-      instructions:
-        "Send payment using the reference above via your payment provider. The platform will confirm and hold funds in escrow.",
-    },
-  });
-});
-
-export const confirmPayment = asyncHandler(async (req: Request, res: Response) => {
-  const { payment_ref } = req.body as { payment_ref: string };
-
-  if (!payment_ref) throw new AppError("payment_ref is required", 400);
-
-  const tx = await Transaction.findOne({ payment_ref })
-    .populate<{ seller_id: LeanUser }>("seller_id", "email first_name")
-    .populate<{ listing_id: LeanListing }>("listing_id", "title")
-    .lean();
-
-  if (!tx) throw new AppError("Transaction not found for this payment reference", 404);
-  if (tx.status !== "PENDING_PAYMENT") {
-    throw new AppError("Transaction is not in pending payment state", 400);
+      customer_email: req.user!.email,
+      callback_url: `${env.APP_URL}/api/webhooks/payment`,
+    });
+  } catch {
+    throw new AppError("Payment provider unavailable, please try again", 502);
   }
 
-  await Transaction.findByIdAndUpdate(tx._id, { status: "PAID" });
-
-  const seller = tx.seller_id as LeanUser;
-  const listing = tx.listing_id as LeanListing;
-
-  await EmailService.sendPaymentReceived(
-    seller.email!,
-    seller.first_name,
-    listing.title,
-    tx.seller_amount,
-    tx._id.toString()
-  );
+  await Transaction.findByIdAndUpdate(id, { payment_ref: checkout.order_reference });
 
   return sendSuccess({
     res,
-    message: "Payment confirmed. Seller has been notified to ship the item.",
-    data: { transaction_id: tx._id.toString(), status: "PAID" },
+    message: "Checkout session created. Complete payment via the checkout link.",
+    data: { transaction_id: id, checkout_link: checkout.checkout_link },
   });
 });
 
@@ -201,7 +173,7 @@ export const confirmReceipt = asyncHandler(async (req: Request, res: Response) =
 
   const tx = await Transaction.findById(id)
     .populate<{ seller_id: LeanUser }>("seller_id", "email first_name")
-    .populate<{ listing_id: LeanListing }>("listing_id", "title")
+    .populate<{ listing_id: LeanListing }>("listing_id", "item_name")
     .lean();
 
   if (!tx) throw new AppError("Transaction not found", 404);
@@ -228,10 +200,18 @@ export const confirmReceipt = asyncHandler(async (req: Request, res: Response) =
   await EmailService.sendReceiptConfirmed(
     seller.email!,
     seller.first_name,
-    listing.title,
+    listing.item_name,
     tx.seller_amount,
     auto_release_at
   );
+
+  await createNotification({
+    user_id: seller._id,
+    type: "RECEIPT_CONFIRMED",
+    title: "Buyer confirmed receipt",
+    body: `The buyer confirmed receipt of "${listing.item_name}". Payment releases on ${auto_release_at.toLocaleDateString()}`,
+    related_transaction_id: id,
+  }).catch(() => undefined);
 
   return sendSuccess({
     res,
@@ -252,7 +232,7 @@ export const releasePayment = asyncHandler(async (req: Request, res: Response) =
 
   const tx = await Transaction.findById(id)
     .populate<{ seller_id: LeanUser }>("seller_id", "email first_name")
-    .populate<{ listing_id: LeanListing }>("listing_id", "title")
+    .populate<{ listing_id: LeanListing }>("listing_id", "item_name")
     .lean();
 
   if (!tx) throw new AppError("Transaction not found", 404);
@@ -261,18 +241,27 @@ export const releasePayment = asyncHandler(async (req: Request, res: Response) =
     throw new AppError("You can only release payment after confirming receipt", 400);
   }
 
-  const now = new Date();
-  await Transaction.findByIdAndUpdate(id, { status: "RELEASED", released_at: now });
-
   const seller = tx.seller_id as LeanUser;
   const listing = tx.listing_id as LeanListing;
+
+  const now = new Date();
+  await Transaction.findByIdAndUpdate(id, { status: "RELEASED", released_at: now });
+  await recordEscrowRelease(seller._id, tx._id, tx.seller_amount);
 
   await EmailService.sendPaymentReleased(
     seller.email!,
     seller.first_name,
-    listing.title,
+    listing.item_name,
     tx.seller_amount
   );
+
+  await createNotification({
+    user_id: seller._id,
+    type: "PAYMENT_RELEASED",
+    title: "Payment released",
+    body: `₦${tx.seller_amount.toLocaleString()} for "${listing.item_name}" has been released to you`,
+    related_transaction_id: id,
+  }).catch(() => undefined);
 
   return sendSuccess({
     res,
@@ -283,12 +272,12 @@ export const releasePayment = asyncHandler(async (req: Request, res: Response) =
 
 export const raiseDispute = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { reason } = req.body as DisputeInput;
+  const { reason, evidence_urls } = req.body as DisputeInput;
   const user_id = req.user!.id;
 
   const tx = await Transaction.findById(id)
     .populate<{ seller_id: LeanUser }>("seller_id", "email first_name")
-    .populate<{ listing_id: LeanListing }>("listing_id", "title")
+    .populate<{ listing_id: LeanListing }>("listing_id", "item_name")
     .lean();
 
   if (!tx) throw new AppError("Transaction not found", 404);
@@ -297,21 +286,63 @@ export const raiseDispute = asyncHandler(async (req: Request, res: Response) => 
     throw new AppError("Disputes can only be raised on paid or receipt-confirmed transactions", 400);
   }
 
-  await Transaction.findByIdAndUpdate(id, { status: "DISPUTED" });
+  const dispute = await Dispute.create({
+    transaction_id: id,
+    raised_by: user_id,
+    description: reason,
+    evidence_urls: evidence_urls ?? [],
+  });
+
+  await Transaction.findByIdAndUpdate(id, { status: "DISPUTED", dispute_id: dispute._id });
 
   const seller = tx.seller_id as LeanUser;
   const listing = tx.listing_id as LeanListing;
 
-  await EmailService.sendDisputeRaised(
-    seller.email!,
-    seller.first_name,
-    listing.title,
-    id
-  );
+  await EmailService.sendDisputeRaised(seller.email!, seller.first_name, listing.item_name, id);
+
+  await createNotification({
+    user_id: seller._id,
+    type: "DISPUTE_RAISED",
+    title: "Dispute raised",
+    body: `A dispute was raised on "${listing.item_name}". Payment is held until resolved.`,
+    related_transaction_id: id,
+  }).catch(() => undefined);
 
   return sendSuccess({
     res,
+    code: 201,
     message: "Dispute raised. Our team will review and contact both parties. Payment is held until resolved.",
-    data: { transaction_id: id, status: "DISPUTED", reason },
+    data: { transaction_id: id, status: "DISPUTED", dispute_id: dispute._id.toString() },
+  });
+});
+
+export const getDispute = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user_id = req.user!.id;
+
+  const tx = await Transaction.findById(id).select("buyer_id seller_id dispute_id").lean();
+  if (!tx) throw new AppError("Transaction not found", 404);
+  if (tx.buyer_id.toString() !== user_id && tx.seller_id.toString() !== user_id) {
+    throw new AppError("Forbidden", 403);
+  }
+  if (!tx.dispute_id) throw new AppError("No dispute exists for this transaction", 404);
+
+  const dispute = await Dispute.findById(tx.dispute_id).lean();
+  if (!dispute) throw new AppError("Dispute not found", 404);
+
+  return sendSuccess({
+    res,
+    data: {
+      dispute: {
+        id: dispute._id.toString(),
+        transaction_id: dispute.transaction_id.toString(),
+        description: dispute.description,
+        evidence_urls: dispute.evidence_urls,
+        status: dispute.status,
+        resolution_note: dispute.resolution_note,
+        resolved_at: dispute.resolved_at,
+        created_at: dispute.created_at,
+      },
+    },
   });
 });
