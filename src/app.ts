@@ -1,10 +1,12 @@
 import express, { Application, Request, Response, NextFunction } from "express";
+import cors from "cors";
 import routes from "@/routes/index";
 import { errorHandler } from "@/api/v1/middleware/errorHandler";
 import { sendError } from "@/utils/response";
 
 const app: Application = express();
 
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
