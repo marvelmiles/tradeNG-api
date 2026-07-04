@@ -694,7 +694,21 @@ Seller creates a DRAFT listing → uploads images/video via /uploads → publish
             example: "TEXT",
           },
           body: { type: "string", nullable: true, example: "Is this still available?" },
-          offer_id: { type: "string", nullable: true, example: null },
+          offer: {
+            type: "object",
+            nullable: true,
+            example: null,
+            properties: {
+              id: { type: "string", example: "686a1c4e3f9b2d0012ab3e00" },
+              status: {
+                type: "string",
+                enum: ["PENDING", "ACCEPTED", "COUNTERED", "DECLINED", "WITHDRAWN"],
+                example: "PENDING",
+              },
+              parent_offer_id: { type: "string", nullable: true, example: null },
+              amount: { type: "number", example: 100000 },
+            },
+          },
           read_at: { type: "string", format: "date-time", nullable: true, example: null },
           created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
         },

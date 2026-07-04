@@ -19,6 +19,17 @@ import type { CreateConversationInput, SendMessageInput } from "@/api/v1/validat
 
 type LeanUser = { _id: Types.ObjectId; first_name: string; last_name: string };
 type LeanListing = { _id: Types.ObjectId; item_name: string; images: string[] };
+type LeanOffer = { _id: Types.ObjectId; status: string; parent_offer_id: Types.ObjectId | null; amount: number };
+
+const formatOfferRef = (offer: Types.ObjectId | LeanOffer | null | undefined) => {
+  if (!offer || offer instanceof Types.ObjectId) return null;
+  return {
+    id: offer._id.toString(),
+    status: offer.status,
+    parent_offer_id: offer.parent_offer_id?.toString() ?? null,
+    amount: offer.amount,
+  };
+};
 
 const formatConversation = (conversation: {
   _id: Types.ObjectId;
@@ -140,6 +151,7 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
     const items = await Message.find({ ...where, ...buildCursorFilter(pagination.cursor) })
       .sort({ _id: -1 })
       .limit(pagination.limit + 1)
+      .populate<{ offer_id: LeanOffer | null }>("offer_id", "status parent_offer_id amount")
       .lean();
 
     const paginationResult = buildCursorPagination(pagination.cursor, items, pagination.limit);
@@ -152,7 +164,7 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
           sender_id: m.sender_id.toString(),
           message_type: m.message_type,
           body: m.body,
-          offer_id: m.offer_id?.toString() ?? null,
+          offer: formatOfferRef(m.offer_id),
           read_at: m.read_at,
           created_at: m.created_at,
         })),
@@ -163,7 +175,12 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
 
   const skip = (pagination.page - 1) * pagination.limit;
   const [items, total] = await Promise.all([
-    Message.find(where).sort({ _id: -1 }).skip(skip).limit(pagination.limit).lean(),
+    Message.find(where)
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(pagination.limit)
+      .populate<{ offer_id: LeanOffer | null }>("offer_id", "status parent_offer_id amount")
+      .lean(),
     Message.countDocuments(where),
   ]);
 
@@ -175,7 +192,7 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
         sender_id: m.sender_id.toString(),
         message_type: m.message_type,
         body: m.body,
-        offer_id: m.offer_id?.toString() ?? null,
+        offer: formatOfferRef(m.offer_id),
         read_at: m.read_at,
         created_at: m.created_at,
       })),
