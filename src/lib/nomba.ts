@@ -83,18 +83,53 @@ export const createCheckoutOrder = async (
   };
 };
 
+export interface NombaWebhookEvent {
+  event_type: string;
+  requestId: string;
+  data: {
+    merchant: { userId: string; walletId: string };
+    transaction: {
+      transactionId: string;
+      type: string;
+      time: string;
+      responseCode?: string;
+    };
+    order?: { orderReference?: string; orderId?: string };
+  };
+}
+
+// Signature scheme per https://developer.nomba.com/docs/api-basics/webhook —
+// HMAC-SHA256(base64) of a colon-joined string of transaction fields plus the
+// nomba-timestamp header, compared against the nomba-signature header.
 export const verifyWebhookSignature = (
-  raw_body: Buffer,
+  payload: NombaWebhookEvent,
+  timestamp: string | undefined,
   signature: string | undefined,
 ): boolean => {
-  if (!signature) return false;
+  if (!signature || !timestamp) return false;
+
+  const { event_type, requestId } = payload;
+  const { userId, walletId } = payload.data.merchant;
+  const { transactionId, type, time, responseCode } = payload.data.transaction;
+
+  const hashing_payload = [
+    event_type,
+    requestId,
+    userId,
+    walletId,
+    transactionId,
+    type,
+    time,
+    responseCode ?? "",
+    timestamp,
+  ].join(":");
 
   const expected = createHmac("sha256", env.NOMBA_WEBHOOK_SECRET)
-    .update(raw_body)
-    .digest("hex");
+    .update(hashing_payload)
+    .digest("base64");
 
-  const expected_buffer = Buffer.from(expected, "utf8");
-  const provided_buffer = Buffer.from(signature, "utf8");
+  const expected_buffer = Buffer.from(expected.toLowerCase(), "utf8");
+  const provided_buffer = Buffer.from(signature.toLowerCase(), "utf8");
 
   if (expected_buffer.length !== provided_buffer.length) return false;
 
@@ -165,17 +200,11 @@ export const verifyTransaction = async (
   };
 };
 
-export interface NombaWebhookPayload {
-  order_reference: string;
-  status: string;
-}
-
-export const extractNombaPayload = (raw: unknown): NombaWebhookPayload => {
-  const body = raw as Record<string, any>;
-  const data = body?.data ?? body;
-
-  return {
-    order_reference: data?.orderReference ?? data?.order_reference ?? "",
-    status: (data?.status ?? data?.orderStatus ?? "").toString().toUpperCase(),
-  };
-};
+// Nomba's webhook docs don't publish a dedicated online-checkout example, so
+// we accept the order reference wherever it's found on the transaction event.
+export const extractOrderReference = (
+  payload: NombaWebhookEvent,
+): string | undefined =>
+  payload.data.order?.orderReference ??
+  (payload.data.transaction as { orderReference?: string }).orderReference ??
+  (payload.data.transaction as { merchantTxRef?: string }).merchantTxRef;
