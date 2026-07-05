@@ -268,6 +268,23 @@ export const EmailService = {
     });
   },
 
+  async sendPaymentReversed(
+    user_email: string,
+    user_name: string,
+    listing_title: string,
+    amount: number,
+  ) {
+    await send({
+      to: user_email,
+      subject: `Payment reversed for "${listing_title}"`,
+      html: base(
+        "Payment Reversed",
+        `<p>Hi <strong>${user_name}</strong>,</p>
+        <p>The payment of <strong>₦${amount.toLocaleString()}</strong> for "<strong>${listing_title}</strong>" was reversed by the payment provider. The transaction has been cancelled and any escrowed funds have been released.</p>`,
+      ),
+    });
+  },
+
   async sendCategoryApproved(user_email: string, user_name: string, category_name: string) {
     await send({
       to: user_email,

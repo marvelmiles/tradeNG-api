@@ -1,12 +1,29 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "@/utils/asyncHandler";
 import { Transaction } from "@/models/v1/transaction.model";
-import { markTransactionPaid } from "@/api/v1/services/transaction.service";
+import {
+  markTransactionPaid,
+  markTransactionReversed,
+  notifyPaymentFailed,
+} from "@/api/v1/services/transaction.service";
 import {
   verifyWebhookSignature,
   extractOrderReference,
   NombaWebhookEvent,
 } from "@/lib/nomba";
+
+// Events Nomba can send, per https://developer.nomba.com/docs/api-basics/webhook.
+// Only payment_* events map to anything in this codebase — withdrawals are
+// settled manually by an admin (see wallet.controller.ts), not via Nomba
+// payouts, so the payout_* events have nothing to reconcile against yet.
+const findTransactionByReference = async (payload: NombaWebhookEvent) => {
+  const order_reference = extractOrderReference(payload);
+  if (!order_reference) return null;
+
+  return Transaction.findOne({ payment_ref: order_reference })
+    .select("_id status")
+    .lean();
+};
 
 export const handlePaymentWebhook = asyncHandler(
   async (req: Request, res: Response) => {
@@ -37,17 +54,25 @@ export const handlePaymentWebhook = asyncHandler(
 
     res.status(200).json({ received: true });
 
-    if (payload.event_type !== "payment_success") return;
+    switch (payload.event_type) {
+      case "payment_success": {
+        const tx = await findTransactionByReference(payload);
+        if (tx) await markTransactionPaid(tx._id);
+        break;
+      }
+      case "payment_failed": {
+        const tx = await findTransactionByReference(payload);
+        if (tx) await notifyPaymentFailed(tx._id);
+        break;
+      }
+      case "payment_reversal": {
+        const tx = await findTransactionByReference(payload);
+        if (tx) await markTransactionReversed(tx._id);
+        break;
+      }
 
-    const order_reference = extractOrderReference(payload);
-    if (!order_reference) return;
-
-    const tx = await Transaction.findOne({ payment_ref: order_reference })
-      .select("_id status")
-      .lean();
-
-    if (!tx) return;
-
-    await markTransactionPaid(tx._id);
+      default:
+        break;
+    }
   },
 );

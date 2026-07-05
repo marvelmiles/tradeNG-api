@@ -215,13 +215,25 @@ Seller creates a DRAFT listing → uploads images/video via /uploads → publish
   (POST /offers/listings/:listingId, then accept/counter/decline)
 → A direct buy or an accepted offer creates a Transaction in PENDING_PAYMENT status
 → Buyer calls POST /transactions/:id/checkout to get a Nomba checkout_link and completes payment
-→ Payment gateway webhooks /api/webhooks/payment
-→ Platform confirms payment (status: PAID)
+→ Payment gateway webhooks POST /api/webhooks/payment (or GET /transactions/:id/verify as a manual fallback)
+→ Platform confirms payment (status: PAID) — if Nomba instead reports a failed or reversed payment,
+  the transaction is either left in PENDING_PAYMENT (failed, buyer can retry) or moved to REFUNDED (reversed)
 → Seller ships item
 → Buyer confirms receipt (status: RECEIPT_CONFIRMED)
 → Buyer releases payment OR auto-releases after 48h (status: RELEASED)
 → Seller's wallet is credited and can be withdrawn to a payout bank
 \`\`\`
+
+## Payment Webhook Events
+
+The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-signature\`/\`nomba-timestamp\` headers (HMAC-SHA256, base64) and reacts to these event types:
+
+| Event | Effect |
+|---|---|
+| \`payment_success\` | Transaction → \`PAID\`, escrow held, seller notified. |
+| \`payment_failed\` | Transaction stays \`PENDING_PAYMENT\`; buyer is notified to retry checkout. |
+| \`payment_reversal\` | Transaction (if \`PAID\`/\`RECEIPT_CONFIRMED\`) → \`REFUNDED\`, escrow hold released, buyer and seller notified. |
+| \`payout_success\`, \`payout_failed\`, \`payout_refund\` | Acknowledged only — withdrawals are settled manually by an admin, not via Nomba payouts. |
     `,
     contact: { name: "TradeNG Support", email: "support@tradeng.com" },
   },
@@ -727,6 +739,8 @@ Seller creates a DRAFT listing → uploads images/video via /uploads → publish
               "OFFER_COUNTERED",
               "OFFER_DECLINED",
               "PAYMENT_RECEIVED",
+              "PAYMENT_FAILED",
+              "PAYMENT_REVERSED",
               "RECEIPT_CONFIRMED",
               "PAYMENT_RELEASED",
               "DISPUTE_RAISED",
