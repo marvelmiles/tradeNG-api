@@ -24,7 +24,7 @@ const main = async (): Promise<void> => {
   initSocket(httpServer);
 
   httpServer.listen(env.PORT, () => {
-    const origin = env.APP_URL;
+    const origin = env.SERVER_URL;
     console.log(`[Server] Running at ${origin}`);
     console.log(`[Server] API base: ${origin}/api/${env.API_VERSION}`);
     console.log(`[Server] Webhooks: ${origin}/api/webhooks/payment`);

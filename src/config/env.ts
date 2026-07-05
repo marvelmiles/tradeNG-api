@@ -15,7 +15,8 @@ export const env = {
   NODE_ENV: optional("NODE_ENV", "development"),
   PORT: parseInt(optional("PORT", "3000")),
   APP_NAME: optional("APP_NAME", "TradeNG"),
-  APP_URL: optional("APP_URL", "http://localhost:3000"),
+  FRONTEND_URL: optional("FRONTEND_URL", "http://localhost:3000"),
+  SERVER_URL: optional("SERVER_URL", "http://localhost:5000"),
   API_VERSION: optional("API_VERSION", "v1"),
   MONGODB_URI: required("MONGODB_URI"),
   JWT_SECRET: required("JWT_SECRET"),
@@ -37,7 +38,7 @@ export const env = {
   NOMBA_CLIENT_ID: required("NOMBA_CLIENT_ID"),
   NOMBA_CLIENT_SECRET: required("NOMBA_CLIENT_SECRET"),
   NOMBA_ACCOUNT_ID: required("NOMBA_ACCOUNT_ID"),
-  NOMBA_BASE_URL: optional("NOMBA_BASE_URL", "https://api.nomba.com"),
+  NOMBA_BASE_URL: optional("NOMBA_BASE_URL", "https://sandbox.nomba.com"),
   NOMBA_WEBHOOK_SECRET: required("NOMBA_WEBHOOK_SECRET"),
 
   SUPPORT_INBOX_EMAIL: optional("SUPPORT_INBOX_EMAIL", "support@tradeng.com"),

@@ -2,26 +2,36 @@ import axios from "axios";
 import { createHmac, timingSafeEqual } from "crypto";
 import { env } from "@/config/env";
 
-const client = axios.create({ baseURL: env.NOMBA_BASE_URL, timeout: 15000 });
+const client = axios.create({
+  baseURL: env.NOMBA_BASE_URL,
+  timeout: 30000,
+  headers: {
+    "Content-Type": "application/json",
+    accountId: env.NOMBA_ACCOUNT_ID,
+  },
+});
 
 let cached_token: string | null = null;
 let cached_token_expires_at = 0;
 
 interface NombaTokenResponse {
-  data: { token: string; expiresIn: number };
+  data: { token?: string; expiresIn: number; access_token?: string };
 }
 
 const getAccessToken = async (): Promise<string> => {
   if (cached_token && Date.now() < cached_token_expires_at) return cached_token;
 
-  const response = await client.post<NombaTokenResponse>("/v1/auth/token/issue", {
-    grant_type: "client_credentials",
-    client_id: env.NOMBA_CLIENT_ID,
-    client_secret: env.NOMBA_CLIENT_SECRET,
-  });
+  const response = await client.post<NombaTokenResponse>(
+    "/v1/auth/token/issue",
+    {
+      grant_type: "client_credentials",
+      client_id: env.NOMBA_CLIENT_ID,
+      client_secret: env.NOMBA_CLIENT_SECRET,
+    },
+  );
 
-  const { token, expiresIn } = response.data.data;
-  cached_token = token;
+  const { token, access_token, expiresIn } = response.data.data;
+  cached_token = access_token || token || "";
   cached_token_expires_at = Date.now() + Math.max(expiresIn - 60, 30) * 1000;
 
   return cached_token;
@@ -44,7 +54,7 @@ interface NombaCheckoutResponse {
 }
 
 export const createCheckoutOrder = async (
-  params: CreateCheckoutOrderParams
+  params: CreateCheckoutOrderParams,
 ): Promise<CreateCheckoutOrderResult> => {
   const token = await getAccessToken();
 
@@ -64,16 +74,24 @@ export const createCheckoutOrder = async (
         Authorization: `Bearer ${token}`,
         accountId: env.NOMBA_ACCOUNT_ID,
       },
-    }
+    },
   );
 
-  return { checkout_link: response.data.data.checkoutLink, order_reference: params.order_reference };
+  return {
+    checkout_link: response.data.data.checkoutLink,
+    order_reference: params.order_reference,
+  };
 };
 
-export const verifyWebhookSignature = (raw_body: Buffer, signature: string | undefined): boolean => {
+export const verifyWebhookSignature = (
+  raw_body: Buffer,
+  signature: string | undefined,
+): boolean => {
   if (!signature) return false;
 
-  const expected = createHmac("sha256", env.NOMBA_WEBHOOK_SECRET).update(raw_body).digest("hex");
+  const expected = createHmac("sha256", env.NOMBA_WEBHOOK_SECRET)
+    .update(raw_body)
+    .digest("hex");
 
   const expected_buffer = Buffer.from(expected, "utf8");
   const provided_buffer = Buffer.from(signature, "utf8");
