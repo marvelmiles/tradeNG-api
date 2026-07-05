@@ -6,6 +6,7 @@ import { User } from "@/models/v1/user.model";
 
 interface JwtPayload {
   user_id: string;
+  token_version: number;
 }
 
 export const requireAuth = async (
@@ -29,10 +30,14 @@ export const requireAuth = async (
     }
 
     const user = await User.findById(payload.user_id)
-      .select("first_name last_name email status")
+      .select("first_name last_name email status token_version")
       .lean();
 
     if (!user) throw new AppError("Account not found", 401);
+
+    if ((payload.token_version ?? 0) !== user.token_version) {
+      throw new AppError("Session has been signed out. Please log in again.", 401);
+    }
 
     if (user.status === "UNVERIFIED") {
       throw new AppError("Please verify your email address to continue", 403);

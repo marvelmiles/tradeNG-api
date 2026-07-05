@@ -20,9 +20,13 @@ import type {
 
 const generateOtp = (): string => String(randomInt(100000, 999999));
 
-const signToken = (user_id: string): string =>
-  jwt.sign({ user_id }, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRY as jwt.SignOptions["expiresIn"],
+const signToken = (
+  user_id: string,
+  token_version: number,
+  expiresIn: string = env.JWT_EXPIRY,
+): string =>
+  jwt.sign({ user_id, token_version }, env.JWT_SECRET, {
+    expiresIn: expiresIn as jwt.SignOptions["expiresIn"],
   });
 
 export const signup = asyncHandler(async (req: Request, res: Response) => {
@@ -127,7 +131,7 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
     email: user.email,
   });
 
-  const token = signToken(user._id.toString());
+  const token = signToken(user._id.toString(), 0);
 
   return sendSuccess({
     res,
@@ -175,10 +179,10 @@ export const resendOtp = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
-  const { email, password } = req.body as LoginInput;
+  const { email, password, remember_me } = req.body as LoginInput;
 
   const user = await User.findOne({ email })
-    .select("first_name last_name email password status")
+    .select("first_name last_name email password status token_version")
     .lean();
 
   if (!user) throw new AppError("Invalid email or password", 401);
@@ -200,7 +204,11 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     );
   }
 
-  const token = signToken(user._id.toString());
+  const token = signToken(
+    user._id.toString(),
+    user.token_version,
+    remember_me ? env.JWT_REMEMBER_ME_EXPIRY : env.JWT_EXPIRY,
+  );
 
   return sendSuccess({
     res,
@@ -261,4 +269,13 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
   await User.findByIdAndUpdate(user._id, { password: hashed });
 
   return sendSuccess({ res, message: "Password reset successfully. You can now log in." });
+});
+
+export const signout = asyncHandler(async (req: Request, res: Response) => {
+  await User.findByIdAndUpdate(req.user!.id, { $inc: { token_version: 1 } });
+
+  return sendSuccess({
+    res,
+    message: "Signed out successfully. All active sessions have been invalidated.",
+  });
 });

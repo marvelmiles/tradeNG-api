@@ -142,7 +142,7 @@ Protected endpoints require a **Bearer JWT** in the \`Authorization\` header:
 Authorization: Bearer <token>
 \`\`\`
 
-Tokens are obtained from \`POST /auth/login\` or \`POST /auth/verify-email\` and are valid for **7 days** by default. Forgotten passwords can be reset via \`POST /auth/forgot-password\` and \`POST /auth/reset-password\` using a one-time OTP.
+Tokens are obtained from \`POST /auth/login\` or \`POST /auth/verify-email\` and are valid for **7 days** by default (**30 days** if \`remember_me\` is set on login). Call \`POST /auth/signout\` to invalidate all of a user's active tokens immediately. Forgotten passwords can be reset via \`POST /auth/forgot-password\` and \`POST /auth/reset-password\` using a one-time OTP.
 
 ## Response Envelope
 
@@ -982,8 +982,13 @@ OTP codes expire after **15 minutes** by default.
       post: {
         tags: ["Auth"],
         summary: "Login with email and password",
-        description:
-          "Authenticates an active user and returns a JWT token valid for 7 days.",
+        description: `
+Authenticates an active user and returns a JWT token.
+
+Set \`remember_me: true\` to receive a long-lived token (**30 days** by default) instead of the standard **7-day** token — useful for a "keep me signed in" checkbox on the client.
+
+Signing out via \`POST /auth/signout\` invalidates every token previously issued to the user, regardless of \`remember_me\`.
+        `,
         requestBody: {
           required: true,
           content: {
@@ -998,6 +1003,13 @@ OTP codes expire after **15 minutes** by default.
                     example: "adeola@example.com",
                   },
                   password: { type: "string", example: "Secret123" },
+                  remember_me: {
+                    type: "boolean",
+                    default: false,
+                    description:
+                      "Issue a long-lived (30-day) token instead of the default 7-day token.",
+                    example: false,
+                  },
                 },
               },
             },
@@ -1101,6 +1113,23 @@ OTP codes expire after **15 minutes** by default.
         responses: {
           "200": ok(null, "Password reset successfully. You can now log in."),
           "400": errorEnvelope(400, "BAD_REQUEST", "Invalid or expired OTP."),
+        },
+      },
+    },
+
+    "/auth/signout": {
+      post: {
+        tags: ["Auth"],
+        summary: "Sign out",
+        description: `
+Invalidates every JWT previously issued to the authenticated user — including tokens from other devices and long-lived \`remember_me\` tokens — by bumping the user's internal token version.
+
+Because tokens are stateless, any request made with a token issued before this call will start failing with **401** immediately after.
+        `,
+        security: BEARER,
+        responses: {
+          "200": ok(null, "Signed out successfully. All active sessions have been invalidated."),
+          "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },
     },

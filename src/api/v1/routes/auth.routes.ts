@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireAuth } from "@/api/v1/middleware/auth";
 import { validate } from "@/api/v1/middleware/validate";
 import {
   signup,
@@ -7,6 +8,7 @@ import {
   login,
   forgotPassword,
   resetPassword,
+  signout,
 } from "@/api/v1/controllers/auth.controller";
 import {
   signupSchema,
@@ -25,5 +27,6 @@ router.post("/resend-otp", validate(resendOtpSchema), resendOtp);
 router.post("/login", validate(loginSchema), login);
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
+router.post("/signout", requireAuth, signout);
 
 export default router;

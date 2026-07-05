@@ -15,6 +15,7 @@ export interface IUser extends Document {
   last_name: string;
   email: string;
   password: string;
+  token_version: number;
   phone_number: string | null;
   about: string | null;
   address: string | null;
@@ -45,6 +46,8 @@ const userSchema = new Schema<IUser>(
     last_name: { type: String, required: true, trim: true, maxlength: 50 },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
+    // Bumped on signout to invalidate every previously issued JWT for this user.
+    token_version: { type: Number, default: 0 },
     phone_number: { type: String, default: null, trim: true },
     about: { type: String, default: null, trim: true, maxlength: 500 },
     address: { type: String, default: null, trim: true, maxlength: 300 },

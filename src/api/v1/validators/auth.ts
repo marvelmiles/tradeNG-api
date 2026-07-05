@@ -23,6 +23,7 @@ export const resendOtpSchema = z.object({
 export const loginSchema = z.object({
   email: z.email().transform((v) => v.toLowerCase()),
   password: z.string().min(1, "Password is required"),
+  remember_me: z.boolean().optional().default(false),
 });
 
 export const forgotPasswordSchema = z.object({
