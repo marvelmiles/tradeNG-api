@@ -1993,6 +1993,62 @@ The platform confirms payment automatically via the webhook at \`POST /api/webho
       },
     },
 
+    "/transactions/{id}/verify": {
+      get: {
+        tags: ["Transactions"],
+        summary: "Verify checkout payment (buyer/seller)",
+        description: `
+Manually checks the payment status of a transaction's checkout session directly with **Nomba**, as a fallback for when the payment webhook has not yet arrived.
+
+If the transaction is still \`PENDING_PAYMENT\` and Nomba confirms the payment succeeded, the transaction is moved to \`PAID\`, escrow is held, and the seller is notified — the same outcome as the webhook.
+
+Nomba is queried differently depending on the server environment:
+- **Development** (sandbox): filters the merchant's transactions by \`orderReference\` — see [Filter Parent Account Transactions](https://developer.nomba.com/nomba-api-reference/transactions/filter-parent-account-transactions).
+- **Production**: looks up the checkout order directly by \`orderReference\` — see [Fetch Checkout Transaction](https://developer.nomba.com/nomba-api-reference/online-checkout/fetch-checkout-transaction).
+
+- Only the **buyer** or **seller** can call this.
+- Checkout must have been initiated (\`POST /transactions/{id}/checkout\`) first.
+        `,
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Transaction ID.",
+            example: "686a1c4e3f9b2d0012ab3500",
+          },
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                transaction_id: { type: "string" },
+                status: {
+                  type: "string",
+                  example: "PAID",
+                  description:
+                    "The transaction's status after verification (unchanged if payment has not succeeded yet).",
+                },
+              },
+            },
+            "Transaction status after verifying with Nomba.",
+          ),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "Checkout has not been initiated for this transaction.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { $ref: "#/components/responses/NotFound" },
+          "502": errorEnvelope(502, "BAD_GATEWAY", "Payment provider unavailable, please try again."),
+        },
+      },
+    },
+
     "/transactions/{id}/confirm-receipt": {
       post: {
         tags: ["Transactions"],

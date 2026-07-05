@@ -5,6 +5,7 @@ import {
   getTransaction,
   getMyTransactions,
   checkoutTransaction,
+  verifyTransaction,
   confirmReceipt,
   releasePayment,
   raiseDispute,
@@ -20,6 +21,7 @@ router.get("/", requireAuth, getMyTransactions);
 router.get("/:id", requireAuth, getTransaction);
 
 router.post("/:id/checkout", requireAuth, checkoutTransaction);
+router.get("/:id/verify", requireAuth, verifyTransaction);
 router.post("/:id/confirm-receipt", requireAuth, confirmReceipt);
 router.post("/:id/release", requireAuth, releasePayment);
 router.post("/:id/dispute", requireAuth, validate(disputeSchema), raiseDispute);

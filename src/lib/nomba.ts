@@ -101,6 +101,70 @@ export const verifyWebhookSignature = (
   return timingSafeEqual(expected_buffer, provided_buffer);
 };
 
+export interface VerifyTransactionResult {
+  success: boolean;
+  status: string;
+  order_reference: string;
+}
+
+interface NombaFilterTransactionsResponse {
+  data: {
+    results: Array<{ status: string; orderReference?: string }>;
+  };
+}
+
+interface NombaFetchCheckoutTransactionResponse {
+  data: {
+    success: boolean;
+    message: string;
+  };
+}
+
+const SUCCESS_STATUSES = ["SUCCESS", "PAYMENT_SUCCESSFUL"];
+
+// Nomba's sandbox environment does not expose the online-checkout lookup used
+// in production, so we fall back to filtering account transactions by
+// orderReference there. See:
+// - dev: https://developer.nomba.com/nomba-api-reference/transactions/filter-parent-account-transactions
+// - prod: https://developer.nomba.com/nomba-api-reference/online-checkout/fetch-checkout-transaction
+export const verifyTransaction = async (
+  order_reference: string,
+): Promise<VerifyTransactionResult> => {
+  const token = await getAccessToken();
+
+  if (env.NOMBA_CREDENTIALS_ENV === "production") {
+    const response = await client.get<NombaFetchCheckoutTransactionResponse>(
+      "/v1/checkout/transaction",
+      {
+        params: { idType: "ORDER_REFERENCE", id: order_reference },
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    const { success, message } = response.data.data;
+
+    return {
+      success,
+      status: success ? "SUCCESS" : (message || "PENDING").toUpperCase(),
+      order_reference,
+    };
+  }
+
+  const response = await client.post<NombaFilterTransactionsResponse>(
+    "/v1/transactions/accounts",
+    { orderReference: order_reference },
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+
+  const match = response.data.data.results?.[0];
+
+  return {
+    success: !!match && SUCCESS_STATUSES.includes(match.status),
+    status: match?.status ?? "NOT_FOUND",
+    order_reference,
+  };
+};
+
 export interface NombaWebhookPayload {
   order_reference: string;
   status: string;

@@ -1,18 +1,13 @@
 import { Request, Response } from "express";
-import { Types } from "mongoose";
 import { asyncHandler } from "@/utils/asyncHandler";
 import { Transaction } from "@/models/v1/transaction.model";
-import { EmailService } from "@/api/v1/services/email.service";
-import { recordEscrowHold } from "@/api/v1/services/wallet.service";
-import { createNotification } from "@/api/v1/services/notification.service";
+import { markTransactionPaid } from "@/api/v1/services/transaction.service";
 import { verifyWebhookSignature, extractNombaPayload } from "@/lib/nomba";
-
-type LeanUser = { _id: Types.ObjectId; first_name: string; email: string };
-type LeanListing = { _id: Types.ObjectId; item_name: string };
 
 export const handlePaymentWebhook = asyncHandler(
   async (req: Request, res: Response) => {
-    console.log("webhook initiated");
+    console.log("webhook initiated", req.headers, req.body);
+
     const signature = req.headers["x-nomba-signature"] as string | undefined;
     const raw_body = req.body as Buffer;
 
@@ -36,32 +31,11 @@ export const handlePaymentWebhook = asyncHandler(
     const tx = await Transaction.findOne({
       payment_ref: payload.order_reference,
     })
-      .populate<{ seller_id: LeanUser }>("seller_id", "email first_name")
-      .populate<{ listing_id: LeanListing }>("listing_id", "item_name")
+      .select("_id status")
       .lean();
 
-    if (!tx || tx.status !== "PENDING_PAYMENT") return;
+    if (!tx) return;
 
-    const seller = tx.seller_id as LeanUser;
-    const listing = tx.listing_id as LeanListing;
-
-    await Transaction.findByIdAndUpdate(tx._id, { status: "PAID" });
-    await recordEscrowHold(seller._id, tx._id, tx.seller_amount);
-
-    await EmailService.sendPaymentReceived(
-      seller.email,
-      seller.first_name,
-      listing.item_name,
-      tx.seller_amount,
-      tx._id.toString(),
-    );
-
-    await createNotification({
-      user_id: seller._id,
-      type: "PAYMENT_RECEIVED",
-      title: "Payment received",
-      body: `Payment for "${listing.item_name}" is held in escrow. Ship the item to get paid.`,
-      related_transaction_id: tx._id,
-    }).catch(() => undefined);
+    await markTransactionPaid(tx._id);
   },
 );

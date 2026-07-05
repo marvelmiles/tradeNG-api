@@ -15,7 +15,11 @@ import { Dispute } from "@/models/v1/dispute.model";
 import { EmailService } from "@/api/v1/services/email.service";
 import { recordEscrowRelease } from "@/api/v1/services/wallet.service";
 import { createNotification } from "@/api/v1/services/notification.service";
-import { createCheckoutOrder } from "@/lib/nomba";
+import {
+  createCheckoutOrder,
+  verifyTransaction as verifyNombaTransaction,
+} from "@/lib/nomba";
+import { markTransactionPaid } from "@/api/v1/services/transaction.service";
 import type { DisputeInput } from "@/api/v1/validators/transaction";
 
 type LeanUser = {
@@ -216,6 +220,52 @@ export const checkoutTransaction = asyncHandler(
       message:
         "Checkout session created. Complete payment via the checkout link.",
       data: { transaction_id: id, checkout_link: checkout.checkout_link },
+    });
+  },
+);
+
+export const verifyTransaction = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const user_id = req.user!.id;
+
+    const tx = await Transaction.findById(id).lean();
+
+    if (!tx) throw new AppError("Transaction not found", 404);
+    if (
+      tx.buyer_id.toString() !== user_id &&
+      tx.seller_id.toString() !== user_id
+    ) {
+      throw new AppError("Forbidden", 403);
+    }
+    if (!tx.payment_ref) {
+      throw new AppError(
+        "Checkout has not been initiated for this transaction",
+        400,
+      );
+    }
+
+    let status: string = tx.status;
+
+    if (tx.status === "PENDING_PAYMENT") {
+      let result;
+      try {
+        result = await verifyNombaTransaction(tx.payment_ref);
+      } catch {
+        throw new AppError(
+          "Payment provider unavailable, please try again",
+          502,
+        );
+      }
+
+      if (result.success) {
+        status = (await markTransactionPaid(tx._id)) ?? status;
+      }
+    }
+
+    return sendSuccess({
+      res,
+      data: { transaction_id: id, status },
     });
   },
 );
