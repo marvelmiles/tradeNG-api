@@ -144,6 +144,25 @@ Authorization: Bearer <token>
 
 Tokens are obtained from \`POST /auth/login\` or \`POST /auth/verify-email\` and are valid for **7 days** by default (**30 days** if \`remember_me\` is set on login). Call \`POST /auth/signout\` to invalidate all of a user's active tokens immediately. Forgotten passwords can be reset via \`POST /auth/forgot-password\` and \`POST /auth/reset-password\` using a one-time OTP.
 
+## Seeded Demo Data
+
+Running \`npm run db:seed\` (see \`src/scripts/seed.ts\`) wipes every operational collection — **except \`categories\`**, which is upserted by slug — and rebuilds a complete fixture set for exercising every endpoint above without manual setup. It refuses to run when \`NODE_ENV=production\`, and is safe to re-run any time (fully idempotent).
+
+**Every seeded account uses the password \`Passw0rd1\`.**
+
+| Email | Role | Notes |
+|---|---|---|
+| \`adaeze.seller@tradeng.dev\` | Top seller #1 | \`ACTIVE\`, verified seller, highest completed-sales count — tops \`GET /discovery/top-sellers\`. Has listings in every status (\`ACTIVE\`, negotiable, \`DRAFT\`, \`SOLD\`), an open dispute, a completed withdrawal, and notifications across most types. |
+| \`chidi.seller@tradeng.dev\` | Top seller #2 | \`ACTIVE\`, verified seller. Has a \`CANCELLED\` listing, a transaction in \`RECEIPT_CONFIRMED\` (mid auto-release countdown), and a \`PENDING\` withdrawal request. |
+| \`bola.seller@tradeng.dev\` | Top seller #3 | \`ACTIVE\`, verified seller. Has a transaction still \`PAID\` (escrow held, not yet shipped-confirmed), one still \`PENDING_PAYMENT\` (checkout not started), and a \`REJECTED\` withdrawal (with its ledger reversal). |
+| \`ifeoma.seller@tradeng.dev\` | Verified seller, low volume | \`ACTIVE\`, verified seller, but zero \`RELEASED\` sales — deliberately **absent** from the top-sellers leaderboard despite being verified. Has a \`REFUNDED\` transaction from a buyer-favor dispute resolution. |
+| \`emeka.buyer@tradeng.dev\` | Buyer | \`ACTIVE\`, no listings. Buyer on several of the transactions above; has a wishlist, an ongoing counter-offer thread, and \`PAYMENT_REVERSED\`/\`OFFER_COUNTERED\` notifications. |
+| \`ngozi.buyer@tradeng.dev\` | Buyer | \`ACTIVE\`, has a **pending seller-verification request** (\`verification_requested_at\` set, \`is_verified_seller: false\`) — useful for testing the verification-approval path. |
+| \`tunde.unverified@tradeng.dev\` | Unverified account | \`status: "UNVERIFIED"\` — cannot pass \`requireAuth\`; use this to test signup/verification flows. Has a live (non-expired) signup OTP: \`482913\`. |
+| \`grace.suspended@tradeng.dev\` | Suspended account | \`status: "SUSPENDED"\` — use this to test the login/auth rejection path for suspended users. |
+
+Beyond the accounts, the seed also populates: 17 listings across all 6 default categories, 9 transactions covering **all six** \`TransactionStatus\` values, disputes (one \`OPEN\`, one \`RESOLVED_BUYER\`), buyer/seller review pairs on every \`RELEASED\` transaction, wallet ledger entries consistent with each transaction/withdrawal's state, category requests in all three statuses (including one dynamically-approved \`Sporting Goods\` category), and a couple of public contact-form messages.
+
 ## Response Envelope
 
 Every response — success or error — is wrapped in a consistent envelope:
