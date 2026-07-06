@@ -8,6 +8,7 @@ import {
   buildPagePagination,
   buildCursorPagination,
   buildCursorFilter,
+  ParsedPagination,
 } from "@/utils/pagination";
 import { Listing, IListing } from "@/models/v1/listing.model";
 import { User } from "@/models/v1/user.model";
@@ -17,7 +18,7 @@ import type { CreateListingInput, UpdateListingInput, ListingsQuery } from "@/ap
 type LeanUser = { _id: Types.ObjectId; first_name: string; last_name: string; email?: string; is_verified_seller?: boolean };
 type LeanCategory = { _id: Types.ObjectId; name: string; slug: string };
 
-type LeanListing = Omit<IListing, "seller_id" | "category_id"> & {
+export type LeanListing = Omit<IListing, "seller_id" | "category_id"> & {
   _id: Types.ObjectId;
   seller_id: Types.ObjectId | LeanUser;
   category_id: Types.ObjectId | LeanCategory;
@@ -38,7 +39,7 @@ const formatCategory = (category: Types.ObjectId | LeanCategory | null | undefin
   return { id: category._id.toString(), name: category.name, slug: category.slug };
 };
 
-const formatListing = (listing: LeanListing) => {
+export const formatListing = (listing: LeanListing) => {
   const { _id, seller_id, category_id, ...rest } = listing;
   return {
     id: _id.toString(),
@@ -48,8 +49,49 @@ const formatListing = (listing: LeanListing) => {
   };
 };
 
-const SELLER_POPULATE = { path: "seller_id", select: "first_name last_name is_verified_seller" };
-const CATEGORY_POPULATE = { path: "category_id", select: "name slug" };
+export const SELLER_POPULATE = { path: "seller_id", select: "first_name last_name is_verified_seller" };
+export const CATEGORY_POPULATE = { path: "category_id", select: "name slug" };
+
+// Shared by discovery endpoints (featured / recent-from-verified-sellers) that
+// list ACTIVE listings most-recent-first with an arbitrary extra `where` filter.
+export const paginateListingsByRecency = async (
+  where: Record<string, unknown>,
+  pagination: ParsedPagination,
+) => {
+  if (pagination.pagination_type === "cursor") {
+    const filtered = { ...where, ...buildCursorFilter(pagination.cursor) };
+    const items = await Listing.find(filtered)
+      .sort({ _id: -1 })
+      .limit(pagination.limit + 1)
+      .populate(SELLER_POPULATE)
+      .populate(CATEGORY_POPULATE)
+      .lean();
+
+    const cast = items as unknown as LeanListing[];
+
+    return {
+      listings: cast.slice(0, pagination.limit).map(formatListing),
+      pagination: buildCursorPagination(pagination.cursor, cast, pagination.limit),
+    };
+  }
+
+  const skip = (pagination.page - 1) * pagination.limit;
+  const [items, total] = await Promise.all([
+    Listing.find(where)
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(pagination.limit)
+      .populate(SELLER_POPULATE)
+      .populate(CATEGORY_POPULATE)
+      .lean(),
+    Listing.countDocuments(where),
+  ]);
+
+  return {
+    listings: (items as unknown as LeanListing[]).map(formatListing),
+    pagination: buildPagePagination(pagination.page, pagination.limit, total),
+  };
+};
 
 export const createListing = asyncHandler(async (req: Request, res: Response) => {
   const input = req.body as CreateListingInput;

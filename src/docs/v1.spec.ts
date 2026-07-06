@@ -1711,6 +1711,144 @@ Starts a direct purchase of an **ACTIVE** listing at its listed \`price\`, creat
     },
 
     // ═══════════════════════════════════════════════════════════════
+    //  DISCOVERY
+    // ═══════════════════════════════════════════════════════════════
+    "/discovery/top-sellers": {
+      get: {
+        tags: ["Discovery"],
+        summary: "Get top sellers",
+        description: `
+Public leaderboard ranking sellers by number of **completed sales** (\`RELEASED\` transactions), tie-broken by total revenue. Only \`ACTIVE\` seller accounts are included.
+
+This is not paginated — it's a fixed top-N list; use \`limit\` to control how many to return.
+        `,
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 50, default: 10 },
+            description: "Number of top sellers to return (max 50).",
+          },
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                top_sellers: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", example: "686a1c4e3f9b2d0012ab3400" },
+                      first_name: { type: "string", example: "Adeola" },
+                      last_name: { type: "string", example: "Okafor" },
+                      profile_photo: { type: "string", nullable: true, example: null },
+                      is_verified_seller: { type: "boolean", example: true },
+                      completed_sales: { type: "integer", example: 42 },
+                      total_revenue: { type: "number", example: 4750000 },
+                      review_average: { type: "number", example: 4.8 },
+                      review_count: { type: "integer", example: 37 },
+                    },
+                  },
+                },
+              },
+            },
+            "Sellers ranked by completed sales.",
+          ),
+        },
+      },
+    },
+
+    "/discovery/featured-listings": {
+      get: {
+        tags: ["Discovery"],
+        summary: "Get featured listings",
+        description:
+          "Returns **ACTIVE** listings from the top 20 sellers (by completed sales — see `GET /discovery/top-sellers`), newest first. Supports the same cursor/page pagination as `GET /listings`.",
+        parameters: [...paginationQueryParams],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                listings: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Listing" },
+                },
+              },
+            },
+            "Featured listing results with pagination.",
+          ),
+        },
+      },
+    },
+
+    "/discovery/best-selling": {
+      get: {
+        tags: ["Discovery"],
+        summary: "Get best-selling listings",
+        description: `
+Returns **ACTIVE** listings ranked by \`view_count\` (highest first) — a proxy for buyer interest, since each listing is unique, single-item inventory sold only once (there's no repeat-sale count to rank by).
+
+**Only page-based pagination is supported here** (\`pagination_type=cursor\` is ignored) because the sort key is \`view_count\`, not \`_id\`.
+        `,
+        parameters: [
+          {
+            name: "page",
+            in: "query",
+            schema: { type: "integer", minimum: 1, default: 1 },
+            description: "Page number.",
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+            description: "Number of items per page (max 50).",
+          },
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                listings: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Listing" },
+                },
+              },
+            },
+            "Best-selling listing results, page-paginated.",
+          ),
+        },
+      },
+    },
+
+    "/discovery/recent-from-verified-sellers": {
+      get: {
+        tags: ["Discovery"],
+        summary: "Get recent listings from verified sellers",
+        description:
+          "Returns **ACTIVE** listings from **verified sellers only** (`is_verified_seller: true`), newest first. Supports the same cursor/page pagination as `GET /listings`. Equivalent to `GET /listings?verified_sellers_only=true`, provided as a dedicated endpoint for a \"verified sellers\" discovery surface.",
+        parameters: [...paginationQueryParams],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                listings: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Listing" },
+                },
+              },
+            },
+            "Recent listing results from verified sellers, with pagination.",
+          ),
+        },
+      },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
     //  OFFERS
     // ═══════════════════════════════════════════════════════════════
     "/offers/received": {
@@ -3627,6 +3765,11 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
     {
       name: "Listings",
       description: "Create and manage marketplace listings — drafts, publishing, browsing, and direct purchase.",
+    },
+    {
+      name: "Discovery",
+      description:
+        "Public, unauthenticated discovery surfaces: top sellers, seller-curated featured listings, best-selling listings, and recent listings from verified sellers only.",
     },
     {
       name: "Offers",

@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:developer.nomba.com)"
+      "WebFetch(domain:developer.nomba.com)",
+      "Bash(grep -n \"═══════════════════════════════════════════════════════════════\\\\s*$\\\\|//  [A-Z]\" \"c:\\\\Users\\\\Marvellous\\\\Documents\\\\tradeNG\\\\tradeNG-api\\\\src\\\\docs\\\\v1.spec.ts\")",
+      "Bash(node -e ' *)"
     ]
   }
 }

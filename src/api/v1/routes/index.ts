@@ -12,6 +12,7 @@ import notificationRoutes from "@/api/v1/routes/notification.routes";
 import profileRoutes from "@/api/v1/routes/profile.routes";
 import userRoutes from "@/api/v1/routes/user.routes";
 import supportRoutes from "@/api/v1/routes/support.routes";
+import discoveryRoutes from "@/api/v1/routes/discovery.routes";
 
 const v1Router = Router();
 
@@ -28,5 +29,6 @@ v1Router.use("/notifications", notificationRoutes);
 v1Router.use("/profile", profileRoutes);
 v1Router.use("/users", userRoutes);
 v1Router.use("/support", supportRoutes);
+v1Router.use("/discovery", discoveryRoutes);
 
 export default v1Router;
