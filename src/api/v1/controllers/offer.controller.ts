@@ -76,6 +76,7 @@ const formatOffer = (offer: LeanOffer) => {
     id: _id.toString(),
     ...rest,
     parent_offer_id: rest.parent_offer_id?.toString() ?? null,
+    transaction_id: rest.transaction_id?.toString(),
     ...(listing ? { listing } : {}),
     buyer: formatUser(buyer_id),
     seller: formatUser(seller_id),
@@ -220,7 +221,11 @@ export const acceptOffer = asyncHandler(async (req: Request, res: Response) => {
     offer.amount
   );
 
-  await Offer.findByIdAndUpdate(id, { status: "ACCEPTED", responded_at: new Date() });
+  await Offer.findByIdAndUpdate(id, {
+    status: "ACCEPTED",
+    responded_at: new Date(),
+    transaction_id: transaction._id,
+  });
   await Offer.updateMany(
     { listing_id: listing._id, _id: { $ne: offer._id }, status: { $in: ["PENDING", "COUNTERED"] } },
     { status: "DECLINED", responded_at: new Date() }

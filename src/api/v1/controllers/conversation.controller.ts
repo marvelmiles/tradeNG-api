@@ -19,7 +19,13 @@ import type { CreateConversationInput, SendMessageInput } from "@/api/v1/validat
 
 type LeanUser = { _id: Types.ObjectId; first_name: string; last_name: string };
 type LeanListing = { _id: Types.ObjectId; item_name: string; images: string[] };
-type LeanOffer = { _id: Types.ObjectId; status: string; parent_offer_id: Types.ObjectId | null; amount: number };
+type LeanOffer = {
+  _id: Types.ObjectId;
+  status: string;
+  parent_offer_id: Types.ObjectId | null;
+  transaction_id: Types.ObjectId | null;
+  amount: number;
+};
 
 const formatOfferRef = (offer: Types.ObjectId | LeanOffer | null | undefined) => {
   if (!offer || offer instanceof Types.ObjectId) return null;
@@ -27,6 +33,7 @@ const formatOfferRef = (offer: Types.ObjectId | LeanOffer | null | undefined) =>
     id: offer._id.toString(),
     status: offer.status,
     parent_offer_id: offer.parent_offer_id?.toString() ?? null,
+    transaction_id: offer.transaction_id?.toString(),
     amount: offer.amount,
   };
 };
@@ -151,7 +158,7 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
     const items = await Message.find({ ...where, ...buildCursorFilter(pagination.cursor) })
       .sort({ _id: -1 })
       .limit(pagination.limit + 1)
-      .populate<{ offer_id: LeanOffer | null }>("offer_id", "status parent_offer_id amount")
+      .populate<{ offer_id: LeanOffer | null }>("offer_id", "status parent_offer_id transaction_id amount")
       .lean();
 
     const paginationResult = buildCursorPagination(pagination.cursor, items, pagination.limit);
@@ -179,7 +186,7 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
       .sort({ _id: -1 })
       .skip(skip)
       .limit(pagination.limit)
-      .populate<{ offer_id: LeanOffer | null }>("offer_id", "status parent_offer_id amount")
+      .populate<{ offer_id: LeanOffer | null }>("offer_id", "status parent_offer_id transaction_id amount")
       .lean(),
     Message.countDocuments(where),
   ]);
@@ -257,3 +264,4 @@ export const markConversationRead = asyncHandler(async (req: Request, res: Respo
 
   return sendSuccess({ res, message: "Conversation marked as read" });
 });
+

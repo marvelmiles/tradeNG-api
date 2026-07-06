@@ -678,6 +678,13 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
               "Set on a counter-offer — points to the offer it counters.",
             example: null,
           },
+          transaction_id: {
+            type: "string",
+            nullable: true,
+            description:
+              "Set once this offer is accepted via `POST /offers/{id}/accept` — the resulting Transaction's ID. `undefined`/absent on offers that were never accepted (still pending, countered, declined, or withdrawn).",
+            example: null,
+          },
           responded_at: {
             type: "string",
             format: "date-time",
@@ -975,6 +982,13 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
               parent_offer_id: {
                 type: "string",
                 nullable: true,
+                example: null,
+              },
+              transaction_id: {
+                type: "string",
+                nullable: true,
+                description:
+                  "Set once this offer is accepted — the resulting Transaction's ID. Absent/`undefined` otherwise.",
                 example: null,
               },
               amount: { type: "number", example: 100000 },
@@ -2267,10 +2281,12 @@ Makes an offer on a listing that has \`allow_price_negotiation\` enabled. Rules:
 Accepts a **PENDING** or **COUNTERED** offer on the seller's listing. This action:
 
 1. Creates a new **Transaction** in \`PENDING_PAYMENT\` status at the offer's amount.
-2. Sets the offer to \`ACCEPTED\` and declines all other pending/countered offers on the listing.
+2. Sets the offer to \`ACCEPTED\`, stamps its \`transaction_id\` with the new transaction's ID, and declines all other pending/countered offers on the listing.
 3. Notifies the buyer via email and in the listing's conversation thread.
 
 Only the **seller** of the listing can accept offers.
+
+Fetching the accepted offer afterward (e.g. via \`GET /offers/received\`, \`GET /offers/listings/{listingId}/mine\`, or embedded in a message via \`GET /conversations/{id}/messages\`) will include its \`transaction_id\` — use it to link straight to \`GET /transactions/{id}\`.
         `,
         security: BEARER,
         parameters: [

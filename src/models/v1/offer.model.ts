@@ -11,6 +11,7 @@ export interface IOffer extends Document {
   note: string | null;
   status: OfferStatus;
   parent_offer_id: Types.ObjectId | null;
+  transaction_id: Types.ObjectId | null;
   responded_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -29,6 +30,8 @@ const offerSchema = new Schema<IOffer>(
       default: "PENDING",
     },
     parent_offer_id: { type: Schema.Types.ObjectId, ref: "Offer", default: null },
+    // Set once the offer is accepted and a Transaction is created for it.
+    transaction_id: { type: Schema.Types.ObjectId, ref: "Transaction", default: null },
     responded_at: { type: Date, default: null },
   },
   {
