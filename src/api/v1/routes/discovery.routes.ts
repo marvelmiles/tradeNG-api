@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getTopSellers,
+  getDiscoveryStats,
   getFeaturedListings,
   getBestSellingListings,
   getRecentVerifiedSellerListings,
@@ -8,6 +9,7 @@ import {
 
 const router = Router();
 
+router.get("/stats", getDiscoveryStats);
 router.get("/top-sellers", getTopSellers);
 router.get("/featured-listings", getFeaturedListings);
 router.get("/best-selling", getBestSellingListings);

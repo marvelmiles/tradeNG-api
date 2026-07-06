@@ -4,7 +4,9 @@
       "WebFetch(domain:developer.nomba.com)",
       "Bash(grep -n \"═══════════════════════════════════════════════════════════════\\\\s*$\\\\|//  [A-Z]\" \"c:\\\\Users\\\\Marvellous\\\\Documents\\\\tradeNG\\\\tradeNG-api\\\\src\\\\docs\\\\v1.spec.ts\")",
       "Bash(node -e ' *)",
-      "Bash(powershell -Command \"\\(Get-Content src/scripts/seed.ts -Raw\\) -replace ' as Partial<IUser> & \\\\{ first_name: string; last_name: string; email: string \\\\}\\\\\\)', '\\)' | Set-Content src/scripts/seed.ts\")"
+      "Bash(powershell -Command \"\\(Get-Content src/scripts/seed.ts -Raw\\) -replace ' as Partial<IUser> & \\\\{ first_name: string; last_name: string; email: string \\\\}\\\\\\)', '\\)' | Set-Content src/scripts/seed.ts\")",
+      "Bash(pkill -f \"ts-node-dev\")",
+      "Bash(pkill -f \"src/server.ts\")"
     ]
   }
 }

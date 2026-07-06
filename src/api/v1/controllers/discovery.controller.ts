@@ -4,8 +4,7 @@ import { sendSuccess } from "@/utils/response";
 import { parsePaginationQuery, buildPagePagination, buildCursorPagination } from "@/utils/pagination";
 import { Listing } from "@/models/v1/listing.model";
 import { User } from "@/models/v1/user.model";
-import { getReviewSummary } from "@/api/v1/services/review.service";
-import { getTopSellerRanking } from "@/api/v1/services/discovery.service";
+import { getTopSellerRanking, resolveTopSellers, getPlatformStats } from "@/api/v1/services/discovery.service";
 import {
   formatListing,
   paginateListingsByRecency,
@@ -17,6 +16,7 @@ import {
 const DEFAULT_TOP_SELLERS_LIMIT = 10;
 const MAX_TOP_SELLERS_LIMIT = 50;
 const FEATURED_SELLER_POOL_SIZE = 20;
+const STATS_TOP_SELLERS_PREVIEW_SIZE = 5;
 
 export const getTopSellers = asyncHandler(async (req: Request, res: Response) => {
   const limit = Math.min(
@@ -24,41 +24,32 @@ export const getTopSellers = asyncHandler(async (req: Request, res: Response) =>
     MAX_TOP_SELLERS_LIMIT,
   );
 
-  const ranking = await getTopSellerRanking(limit);
-  if (ranking.length === 0) {
-    return sendSuccess({ res, data: { top_sellers: [] } });
-  }
-
-  const users = await User.find({
-    _id: { $in: ranking.map((r) => r.seller_id) },
-    status: "ACTIVE",
-  })
-    .select("first_name last_name profile_photo is_verified_seller")
-    .lean();
-  const users_by_id = new Map(users.map((u) => [u._id.toString(), u]));
-
-  const top_sellers = await Promise.all(
-    ranking
-      .filter((r) => users_by_id.has(r.seller_id.toString()))
-      .map(async (r) => {
-        const user = users_by_id.get(r.seller_id.toString())!;
-        const review_summary = await getReviewSummary(r.seller_id);
-
-        return {
-          id: user._id.toString(),
-          first_name: user.first_name,
-          last_name: user.last_name,
-          profile_photo: user.profile_photo,
-          is_verified_seller: user.is_verified_seller,
-          completed_sales: r.completed_sales,
-          total_revenue: r.total_revenue,
-          review_average: review_summary.review_average,
-          review_count: review_summary.review_count,
-        };
-      }),
-  );
+  const top_sellers = await resolveTopSellers(limit);
 
   return sendSuccess({ res, data: { top_sellers } });
+});
+
+export const getDiscoveryStats = asyncHandler(async (_req: Request, res: Response) => {
+  const [stats, top_sellers] = await Promise.all([
+    getPlatformStats(),
+    resolveTopSellers(STATS_TOP_SELLERS_PREVIEW_SIZE),
+  ]);
+
+  return sendSuccess({
+    res,
+    data: {
+      stats: {
+        active_users: stats.active_users,
+        verified_sellers: stats.verified_sellers,
+        active_listings: stats.active_listings,
+        completed_sales: stats.completed_sales,
+        gross_sales_volume: stats.gross_sales_volume,
+        review_average: stats.review_average,
+        review_count: stats.review_count,
+      },
+      top_sellers,
+    },
+  });
 });
 
 export const getFeaturedListings = asyncHandler(async (req: Request, res: Response) => {

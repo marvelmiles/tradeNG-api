@@ -146,7 +146,7 @@ Tokens are obtained from \`POST /auth/login\` or \`POST /auth/verify-email\` and
 
 ## Seeded Demo Data
 
-Running \`npm run db:seed\` (see \`src/scripts/seed.ts\`) wipes every operational collection — **except \`categories\`**, which is upserted by slug — and rebuilds a complete fixture set for exercising every endpoint above without manual setup. It refuses to run when \`NODE_ENV=production\`, and is safe to re-run any time (fully idempotent).
+Running \`npm run db:seed\` (see \`src/scripts/seed.ts\`) wipes every operational collection — **except \`categories\`**. It refuses to run when \`NODE_ENV=production\`, and is safe to re-run any time.
 
 **Every seeded account uses the password \`Passw0rd1\`.**
 
@@ -485,14 +485,40 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
           first_name: { type: "string", example: "Adeola" },
           last_name: { type: "string", example: "Bello" },
-          email: { type: "string", format: "email", example: "adeola@example.com" },
-          phone_number: { type: "string", nullable: true, example: "+2348012345678" },
-          about: { type: "string", nullable: true, example: "Trusted electronics seller since 2023." },
-          address: { type: "string", nullable: true, example: "12 Admiralty Way, Lekki, Lagos" },
-          profile_photo: { type: "string", nullable: true, example: "https://res.cloudinary.com/tradeng/avatar.jpg" },
+          email: {
+            type: "string",
+            format: "email",
+            example: "adeola@example.com",
+          },
+          phone_number: {
+            type: "string",
+            nullable: true,
+            example: "+2348012345678",
+          },
+          about: {
+            type: "string",
+            nullable: true,
+            example: "Trusted electronics seller since 2023.",
+          },
+          address: {
+            type: "string",
+            nullable: true,
+            example: "12 Admiralty Way, Lekki, Lagos",
+          },
+          profile_photo: {
+            type: "string",
+            nullable: true,
+            example: "https://res.cloudinary.com/tradeng/avatar.jpg",
+          },
           is_verified_seller: { type: "boolean", example: false },
-          notification_settings: { $ref: "#/components/schemas/NotificationSettings" },
-          created_at: { type: "string", format: "date-time", example: "2025-07-01T10:00:00.000Z" },
+          notification_settings: {
+            $ref: "#/components/schemas/NotificationSettings",
+          },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-01T10:00:00.000Z",
+          },
         },
       },
 
@@ -503,7 +529,11 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           id: { type: "string", example: "686a1c4e3f9b2d0012ab3600" },
           name: { type: "string", example: "Mobile Phones & Tablets" },
           slug: { type: "string", example: "mobile-phones-tablets" },
-          image: { type: "string", nullable: true, example: "https://res.cloudinary.com/tradeng/categories/phones.jpg" },
+          image: {
+            type: "string",
+            nullable: true,
+            example: "https://res.cloudinary.com/tradeng/categories/phones.jpg",
+          },
           is_active: { type: "boolean", example: true },
         },
       },
@@ -514,15 +544,24 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           name: { type: "string", example: "Vintage Vinyl Records" },
           reason: {
             type: "string",
-            example: "There's no category for collectible vinyl records and turntables.",
+            example:
+              "There's no category for collectible vinyl records and turntables.",
           },
           status: {
             type: "string",
             enum: ["PENDING", "APPROVED", "REJECTED"],
             example: "PENDING",
           },
-          resolved_category_id: { type: "string", nullable: true, example: null },
-          created_at: { type: "string", format: "date-time", example: "2025-07-01T10:00:00.000Z" },
+          resolved_category_id: {
+            type: "string",
+            nullable: true,
+            example: null,
+          },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-01T10:00:00.000Z",
+          },
         },
       },
 
@@ -531,7 +570,10 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         type: "object",
         properties: {
           id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
-          item_name: { type: "string", example: "iPhone 14 Pro Max – Midnight" },
+          item_name: {
+            type: "string",
+            example: "iPhone 14 Pro Max – Midnight",
+          },
           category: {
             type: "object",
             nullable: true,
@@ -619,7 +661,11 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           buyer: { $ref: "#/components/schemas/UserSummary" },
           seller: { $ref: "#/components/schemas/UserSummary" },
           amount: { type: "number", example: 230000 },
-          note: { type: "string", nullable: true, example: "Can you do ₦230,000? I'll pick up today." },
+          note: {
+            type: "string",
+            nullable: true,
+            example: "Can you do ₦230,000? I'll pick up today.",
+          },
           status: {
             type: "string",
             enum: ["PENDING", "ACCEPTED", "COUNTERED", "DECLINED", "WITHDRAWN"],
@@ -628,7 +674,8 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           parent_offer_id: {
             type: "string",
             nullable: true,
-            description: "Set on a counter-offer — points to the offer it counters.",
+            description:
+              "Set on a counter-offer — points to the offer it counters.",
             example: null,
           },
           responded_at: {
@@ -731,10 +778,14 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         type: "object",
         properties: {
           id: { type: "string", example: "686a1c4e3f9b2d0012ab3700" },
-          transaction_id: { type: "string", example: "686a1c4e3f9b2d0012ab3500" },
+          transaction_id: {
+            type: "string",
+            example: "686a1c4e3f9b2d0012ab3500",
+          },
           description: {
             type: "string",
-            example: "Item received was significantly different from the listing description.",
+            example:
+              "Item received was significantly different from the listing description.",
           },
           evidence_urls: {
             type: "array",
@@ -747,8 +798,17 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
             example: "OPEN",
           },
           resolution_note: { type: "string", nullable: true, example: null },
-          resolved_at: { type: "string", format: "date-time", nullable: true, example: null },
-          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+          resolved_at: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+            example: null,
+          },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-03T09:00:00.000Z",
+          },
         },
       },
       Order: {
@@ -764,8 +824,16 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
                   type: "object",
                   properties: {
                     state: { type: "string", example: "RECEIPT_CONFIRMED" },
-                    label: { type: "string", example: "Buyer confirmed delivery" },
-                    at: { type: "string", format: "date-time", nullable: true, example: null },
+                    label: {
+                      type: "string",
+                      example: "Buyer confirmed delivery",
+                    },
+                    at: {
+                      type: "string",
+                      format: "date-time",
+                      nullable: true,
+                      example: null,
+                    },
                   },
                 },
               },
@@ -788,12 +856,25 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           id: { type: "string", example: "686a1c4e3f9b2d0012ab3800" },
           type: {
             type: "string",
-            enum: ["ESCROW_HOLD", "ESCROW_RELEASE", "WITHDRAWAL_HOLD", "WITHDRAWAL_REVERSAL"],
+            enum: [
+              "ESCROW_HOLD",
+              "ESCROW_RELEASE",
+              "WITHDRAWAL_HOLD",
+              "WITHDRAWAL_REVERSAL",
+            ],
             example: "ESCROW_RELEASE",
           },
-          bucket: { type: "string", enum: ["AVAILABLE", "ESCROW"], example: "AVAILABLE" },
+          bucket: {
+            type: "string",
+            enum: ["AVAILABLE", "ESCROW"],
+            example: "AVAILABLE",
+          },
           amount: { type: "number", example: 237500 },
-          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-03T09:00:00.000Z",
+          },
         },
       },
       PayoutBank: {
@@ -819,7 +900,11 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
             enum: ["PENDING", "COMPLETED", "REJECTED"],
             example: "PENDING",
           },
-          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-03T09:00:00.000Z",
+          },
         },
       },
 
@@ -834,13 +919,25 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
             properties: {
               id: { type: "string" },
               item_name: { type: "string" },
-              images: { type: "array", items: { type: "string", format: "uri" } },
+              images: {
+                type: "array",
+                items: { type: "string", format: "uri" },
+              },
             },
           },
           buyer: { $ref: "#/components/schemas/UserSummary" },
           seller: { $ref: "#/components/schemas/UserSummary" },
-          last_message_at: { type: "string", format: "date-time", nullable: true, example: null },
-          last_message_preview: { type: "string", nullable: true, example: null },
+          last_message_at: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+            example: null,
+          },
+          last_message_preview: {
+            type: "string",
+            nullable: true,
+            example: null,
+          },
         },
       },
       Message: {
@@ -853,7 +950,11 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
             enum: ["TEXT", "OFFER", "SYSTEM"],
             example: "TEXT",
           },
-          body: { type: "string", nullable: true, example: "Is this still available?" },
+          body: {
+            type: "string",
+            nullable: true,
+            example: "Is this still available?",
+          },
           offer: {
             type: "object",
             nullable: true,
@@ -862,15 +963,34 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
               id: { type: "string", example: "686a1c4e3f9b2d0012ab3e00" },
               status: {
                 type: "string",
-                enum: ["PENDING", "ACCEPTED", "COUNTERED", "DECLINED", "WITHDRAWN"],
+                enum: [
+                  "PENDING",
+                  "ACCEPTED",
+                  "COUNTERED",
+                  "DECLINED",
+                  "WITHDRAWN",
+                ],
                 example: "PENDING",
               },
-              parent_offer_id: { type: "string", nullable: true, example: null },
+              parent_offer_id: {
+                type: "string",
+                nullable: true,
+                example: null,
+              },
               amount: { type: "number", example: 100000 },
             },
           },
-          read_at: { type: "string", format: "date-time", nullable: true, example: null },
-          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+          read_at: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+            example: null,
+          },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-03T09:00:00.000Z",
+          },
         },
       },
 
@@ -902,12 +1022,32 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
             example: "OFFER_RECEIVED",
           },
           title: { type: "string", example: "New offer received" },
-          body: { type: "string", example: "Adeola offered ₦230,000 for \"iPhone 14 Pro Max\"" },
+          body: {
+            type: "string",
+            example: 'Adeola offered ₦230,000 for "iPhone 14 Pro Max"',
+          },
           related_listing_id: { type: "string", nullable: true, example: null },
-          related_transaction_id: { type: "string", nullable: true, example: null },
-          related_conversation_id: { type: "string", nullable: true, example: null },
-          read_at: { type: "string", format: "date-time", nullable: true, example: null },
-          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+          related_transaction_id: {
+            type: "string",
+            nullable: true,
+            example: null,
+          },
+          related_conversation_id: {
+            type: "string",
+            nullable: true,
+            example: null,
+          },
+          read_at: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+            example: null,
+          },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-03T09:00:00.000Z",
+          },
         },
       },
 
@@ -918,10 +1058,22 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           id: { type: "string", example: "686a1c4e3f9b2d0012ab3e00" },
           reviewer_id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
           reviewee_id: { type: "string", example: "686a1c4e3f9b2d0012ab34ee" },
-          reviewer_role: { type: "string", enum: ["BUYER", "SELLER"], example: "BUYER" },
+          reviewer_role: {
+            type: "string",
+            enum: ["BUYER", "SELLER"],
+            example: "BUYER",
+          },
           rating: { type: "integer", minimum: 1, maximum: 5, example: 5 },
-          comment: { type: "string", nullable: true, example: "Fast shipping, item exactly as described." },
-          created_at: { type: "string", format: "date-time", example: "2025-07-03T09:00:00.000Z" },
+          comment: {
+            type: "string",
+            nullable: true,
+            example: "Fast shipping, item exactly as described.",
+          },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-03T09:00:00.000Z",
+          },
         },
       },
     },
@@ -1214,7 +1366,10 @@ Signing out via \`POST /auth/signout\` invalidates every token previously issued
           },
         },
         responses: {
-          "200": ok(null, "If an account exists for this email, a password reset code has been sent."),
+          "200": ok(
+            null,
+            "If an account exists for this email, a password reset code has been sent.",
+          ),
           "400": { $ref: "#/components/responses/ValidationError" },
         },
       },
@@ -1276,7 +1431,10 @@ Because tokens are stateless, any request made with a token issued before this c
         `,
         security: BEARER,
         responses: {
-          "200": ok(null, "Signed out successfully. All active sessions have been invalidated."),
+          "200": ok(
+            null,
+            "Signed out successfully. All active sessions have been invalidated.",
+          ),
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },
@@ -1296,7 +1454,8 @@ Because tokens are stateless, any request made with a token issued before this c
             name: "q",
             in: "query",
             schema: { type: "string" },
-            description: "Full-text search term across item name and description.",
+            description:
+              "Full-text search term across item name and description.",
             example: "iPhone",
           },
           {
@@ -1379,7 +1538,14 @@ Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), o
             "application/json": {
               schema: {
                 type: "object",
-                required: ["item_name", "category_id", "condition", "description", "price", "delivery_options"],
+                required: [
+                  "item_name",
+                  "category_id",
+                  "condition",
+                  "description",
+                  "price",
+                  "delivery_options",
+                ],
                 properties: {
                   item_name: {
                     type: "string",
@@ -1399,7 +1565,8 @@ Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), o
                   defect_description: {
                     type: "string",
                     maxLength: 1000,
-                    example: "Minor scratch on the back glass, not visible when cased.",
+                    example:
+                      "Minor scratch on the back glass, not visible when cased.",
                   },
                   description: {
                     type: "string",
@@ -1412,24 +1579,28 @@ Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), o
                     type: "array",
                     items: { type: "string", format: "uri" },
                     maxItems: 8,
-                    description: "Cloudinary URLs returned by `POST /uploads/images`.",
+                    description:
+                      "Cloudinary URLs returned by `POST /uploads/images`.",
                   },
                   video: {
                     type: "string",
                     format: "uri",
-                    description: "Cloudinary URL returned by `POST /uploads/video`.",
+                    description:
+                      "Cloudinary URL returned by `POST /uploads/video`.",
                   },
                   price: {
                     type: "number",
                     minimum: 0,
                     exclusiveMinimum: true,
                     example: 250000,
-                    description: "Price in Naira (NGN). Must be greater than 0.",
+                    description:
+                      "Price in Naira (NGN). Must be greater than 0.",
                   },
                   allow_price_negotiation: {
                     type: "boolean",
                     default: false,
-                    description: "Whether buyers can send offers via `/offers`.",
+                    description:
+                      "Whether buyers can send offers via `/offers`.",
                   },
                   delivery_options: {
                     type: "array",
@@ -1443,9 +1614,14 @@ Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), o
                   pickup_address: {
                     type: "string",
                     maxLength: 300,
-                    description: "Required when `delivery_options` includes `PICKUP`.",
+                    description:
+                      "Required when `delivery_options` includes `PICKUP`.",
                   },
-                  location: { type: "string", maxLength: 120, example: "Lekki, Lagos" },
+                  location: {
+                    type: "string",
+                    maxLength: 120,
+                    example: "Lekki, Lagos",
+                  },
                   status: {
                     type: "string",
                     enum: ["DRAFT", "ACTIVE"],
@@ -1481,7 +1657,10 @@ Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), o
           {
             name: "status",
             in: "query",
-            schema: { type: "string", enum: ["DRAFT", "ACTIVE", "SOLD", "CANCELLED"] },
+            schema: {
+              type: "string",
+              enum: ["DRAFT", "ACTIVE", "SOLD", "CANCELLED"],
+            },
             description: "Filter by listing status.",
           },
           ...paginationQueryParams,
@@ -1563,7 +1742,10 @@ Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), o
                     example: "iPhone 14 Pro Max – Midnight (Updated)",
                   },
                   category_id: { type: "string" },
-                  condition: { type: "string", enum: ["NEW", "LIKE_NEW", "USED"] },
+                  condition: {
+                    type: "string",
+                    enum: ["NEW", "LIKE_NEW", "USED"],
+                  },
                   defect_description: { type: "string", maxLength: 1000 },
                   description: {
                     type: "string",
@@ -1732,6 +1914,61 @@ Starts a direct purchase of an **ACTIVE** listing at its listed \`price\`, creat
     // ═══════════════════════════════════════════════════════════════
     //  DISCOVERY
     // ═══════════════════════════════════════════════════════════════
+    "/discovery/stats": {
+      get: {
+        tags: ["Discovery"],
+        summary: "Get platform stats",
+        description: `
+Public, platform-wide snapshot for a homepage/landing-page stats banner: active user count, verified seller count, active listing count, completed sales, gross sales volume, and the platform's overall average review rating — plus a short preview of the top 5 sellers (see \`GET /discovery/top-sellers\` for the full ranked list).
+
+- \`active_users\` / \`verified_sellers\` count \`ACTIVE\` user accounts only.
+- \`active_listings\` counts \`ACTIVE\` listings only.
+- \`completed_sales\` / \`gross_sales_volume\` are computed from \`RELEASED\` transactions only (\`gross_sales_volume\` sums the buyer-paid \`amount\`, not the seller's post-fee \`seller_amount\`).
+- \`review_average\` / \`review_count\` are computed across **every** review on the platform, not per-seller.
+        `,
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                stats: {
+                  type: "object",
+                  properties: {
+                    active_users: { type: "integer", example: 128 },
+                    verified_sellers: { type: "integer", example: 34 },
+                    active_listings: { type: "integer", example: 210 },
+                    completed_sales: { type: "integer", example: 312 },
+                    gross_sales_volume: { type: "number", example: 48250000 },
+                    review_average: { type: "number", example: 4.7 },
+                    review_count: { type: "integer", example: 289 },
+                  },
+                },
+                top_sellers: {
+                  type: "array",
+                  description: "Top 5 sellers by completed sales — same shape as `GET /discovery/top-sellers`.",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", example: "686a1c4e3f9b2d0012ab3400" },
+                      first_name: { type: "string", example: "Adeola" },
+                      last_name: { type: "string", example: "Okafor" },
+                      profile_photo: { type: "string", nullable: true, example: null },
+                      is_verified_seller: { type: "boolean", example: true },
+                      completed_sales: { type: "integer", example: 42 },
+                      total_revenue: { type: "number", example: 4750000 },
+                      review_average: { type: "number", example: 4.8 },
+                      review_count: { type: "integer", example: 37 },
+                    },
+                  },
+                },
+              },
+            },
+            "Platform-wide stats and a top-sellers preview.",
+          ),
+        },
+      },
+    },
+
     "/discovery/top-sellers": {
       get: {
         tags: ["Discovery"],
@@ -1759,10 +1996,17 @@ This is not paginated — it's a fixed top-N list; use \`limit\` to control how 
                   items: {
                     type: "object",
                     properties: {
-                      id: { type: "string", example: "686a1c4e3f9b2d0012ab3400" },
+                      id: {
+                        type: "string",
+                        example: "686a1c4e3f9b2d0012ab3400",
+                      },
                       first_name: { type: "string", example: "Adeola" },
                       last_name: { type: "string", example: "Okafor" },
-                      profile_photo: { type: "string", nullable: true, example: null },
+                      profile_photo: {
+                        type: "string",
+                        nullable: true,
+                        example: null,
+                      },
                       is_verified_seller: { type: "boolean", example: true },
                       completed_sales: { type: "integer", example: 42 },
                       total_revenue: { type: "number", example: 4750000 },
@@ -1848,7 +2092,7 @@ Returns **ACTIVE** listings ranked by \`view_count\` (highest first) — a proxy
         tags: ["Discovery"],
         summary: "Get recent listings from verified sellers",
         description:
-          "Returns **ACTIVE** listings from **verified sellers only** (`is_verified_seller: true`), newest first. Supports the same cursor/page pagination as `GET /listings`. Equivalent to `GET /listings?verified_sellers_only=true`, provided as a dedicated endpoint for a \"verified sellers\" discovery surface.",
+          'Returns **ACTIVE** listings from **verified sellers only** (`is_verified_seller: true`), newest first. Supports the same cursor/page pagination as `GET /listings`. Equivalent to `GET /listings?verified_sellers_only=true`, provided as a dedicated endpoint for a "verified sellers" discovery surface.',
         parameters: [...paginationQueryParams],
         responses: {
           "200": ok(
@@ -1883,7 +2127,13 @@ Returns **ACTIVE** listings ranked by \`view_count\` (highest first) — a proxy
             in: "query",
             schema: {
               type: "string",
-              enum: ["PENDING", "ACCEPTED", "COUNTERED", "DECLINED", "WITHDRAWN"],
+              enum: [
+                "PENDING",
+                "ACCEPTED",
+                "COUNTERED",
+                "DECLINED",
+                "WITHDRAWN",
+              ],
             },
             description: "Filter by offer status.",
           },
@@ -1977,7 +2227,8 @@ Makes an offer on a listing that has \`allow_price_negotiation\` enabled. Rules:
                     minimum: 0,
                     exclusiveMinimum: true,
                     example: 230000,
-                    description: "Offer amount in Naira (NGN). Must be greater than 0.",
+                    description:
+                      "Offer amount in Naira (NGN). Must be greater than 0.",
                   },
                   note: {
                     type: "string",
@@ -2095,7 +2346,11 @@ Only the **seller** of the listing can accept offers.
                     exclusiveMinimum: true,
                     example: 245000,
                   },
-                  note: { type: "string", maxLength: 500, example: "Best I can do is ₦245,000." },
+                  note: {
+                    type: "string",
+                    maxLength: 500,
+                    example: "Best I can do is ₦245,000.",
+                  },
                 },
               },
             },
@@ -2145,7 +2400,11 @@ Only the **seller** of the listing can accept offers.
               schema: {
                 type: "object",
                 properties: {
-                  reason: { type: "string", maxLength: 500, example: "Price is too low for this item." },
+                  reason: {
+                    type: "string",
+                    maxLength: 500,
+                    example: "Price is too low for this item.",
+                  },
                 },
               },
             },
@@ -2317,7 +2576,11 @@ The platform confirms payment automatically via the webhook at \`POST /api/webho
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
           "404": { $ref: "#/components/responses/NotFound" },
-          "502": errorEnvelope(502, "BAD_GATEWAY", "Payment provider unavailable, please try again."),
+          "502": errorEnvelope(
+            502,
+            "BAD_GATEWAY",
+            "Payment provider unavailable, please try again.",
+          ),
         },
       },
     },
@@ -2373,7 +2636,11 @@ Nomba is queried differently depending on the server environment:
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
           "404": { $ref: "#/components/responses/NotFound" },
-          "502": errorEnvelope(502, "BAD_GATEWAY", "Payment provider unavailable, please try again."),
+          "502": errorEnvelope(
+            502,
+            "BAD_GATEWAY",
+            "Payment provider unavailable, please try again.",
+          ),
         },
       },
     },
@@ -2522,7 +2789,8 @@ The buyer raises a dispute on a transaction, freezing the escrow payment until t
                     type: "array",
                     items: { type: "string", format: "uri" },
                     maxItems: 6,
-                    description: "Cloudinary URLs returned by `POST /uploads/images`.",
+                    description:
+                      "Cloudinary URLs returned by `POST /uploads/images`.",
                   },
                 },
               },
@@ -2577,7 +2845,11 @@ The buyer raises a dispute on a transaction, freezing the escrow payment until t
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
-          "404": errorEnvelope(404, "NOT_FOUND", "No dispute exists for this transaction."),
+          "404": errorEnvelope(
+            404,
+            "NOT_FOUND",
+            "No dispute exists for this transaction.",
+          ),
         },
       },
     },
@@ -2611,7 +2883,12 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
                 type: "object",
                 required: ["rating"],
                 properties: {
-                  rating: { type: "integer", minimum: 1, maximum: 5, example: 5 },
+                  rating: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 5,
+                    example: 5,
+                  },
                   comment: {
                     type: "string",
                     maxLength: 1000,
@@ -2638,7 +2915,11 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
           "401": { $ref: "#/components/responses/Unauthorized" },
           "403": { $ref: "#/components/responses/Forbidden" },
           "404": { $ref: "#/components/responses/NotFound" },
-          "409": errorEnvelope(409, "CONFLICT", "You have already reviewed this transaction."),
+          "409": errorEnvelope(
+            409,
+            "CONFLICT",
+            "You have already reviewed this transaction.",
+          ),
         },
       },
     },
@@ -2688,7 +2969,9 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
           "200": ok(
             {
               type: "object",
-              properties: { category: { $ref: "#/components/schemas/Category" } },
+              properties: {
+                category: { $ref: "#/components/schemas/Category" },
+              },
             },
             "Category details.",
           ),
@@ -2722,7 +3005,8 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
                     type: "string",
                     minLength: 10,
                     maxLength: 500,
-                    example: "There's no category for collectible vinyl records and turntables.",
+                    example:
+                      "There's no category for collectible vinyl records and turntables.",
                   },
                 },
               },
@@ -2733,7 +3017,11 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
           "201": created(
             {
               type: "object",
-              properties: { category_request: { $ref: "#/components/schemas/CategoryRequest" } },
+              properties: {
+                category_request: {
+                  $ref: "#/components/schemas/CategoryRequest",
+                },
+              },
             },
             "Category request submitted. We'll review it and notify you once it's created.",
           ),
@@ -2806,15 +3094,25 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
                 images: {
                   type: "array",
                   items: { type: "string", format: "uri" },
-                  example: ["https://res.cloudinary.com/tradeng/uploads/img1.jpg"],
+                  example: [
+                    "https://res.cloudinary.com/tradeng/uploads/img1.jpg",
+                  ],
                 },
               },
             },
             "Images uploaded successfully.",
           ),
-          "400": errorEnvelope(400, "BAD_REQUEST", "At least one image file is required."),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "At least one image file is required.",
+          ),
           "401": { $ref: "#/components/responses/Unauthorized" },
-          "502": errorEnvelope(502, "BAD_GATEWAY", "Media upload failed, please retry."),
+          "502": errorEnvelope(
+            502,
+            "BAD_GATEWAY",
+            "Media upload failed, please retry.",
+          ),
         },
       },
     },
@@ -2852,7 +3150,8 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
                 video: {
                   type: "string",
                   format: "uri",
-                  example: "https://res.cloudinary.com/tradeng/uploads/video1.mp4",
+                  example:
+                    "https://res.cloudinary.com/tradeng/uploads/video1.mp4",
                 },
               },
             },
@@ -2860,7 +3159,11 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
           ),
           "400": errorEnvelope(400, "BAD_REQUEST", "A video file is required."),
           "401": { $ref: "#/components/responses/Unauthorized" },
-          "502": errorEnvelope(502, "BAD_GATEWAY", "Media upload failed, please retry."),
+          "502": errorEnvelope(
+            502,
+            "BAD_GATEWAY",
+            "Media upload failed, please retry.",
+          ),
         },
       },
     },
@@ -2951,14 +3254,24 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
                 type: "object",
                 required: ["bank_name", "account_number", "account_name"],
                 properties: {
-                  bank_name: { type: "string", minLength: 2, maxLength: 100, example: "Guaranty Trust Bank" },
+                  bank_name: {
+                    type: "string",
+                    minLength: 2,
+                    maxLength: 100,
+                    example: "Guaranty Trust Bank",
+                  },
                   account_number: {
                     type: "string",
                     minLength: 10,
                     maxLength: 10,
                     example: "0123456789",
                   },
-                  account_name: { type: "string", minLength: 2, maxLength: 100, example: "Adeola Bello" },
+                  account_name: {
+                    type: "string",
+                    minLength: 2,
+                    maxLength: 100,
+                    example: "Adeola Bello",
+                  },
                 },
               },
             },
@@ -2968,7 +3281,9 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
           "201": created(
             {
               type: "object",
-              properties: { payout_bank: { $ref: "#/components/schemas/PayoutBank" } },
+              properties: {
+                payout_bank: { $ref: "#/components/schemas/PayoutBank" },
+              },
             },
             "Payout bank added.",
           ),
@@ -2982,7 +3297,8 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
       delete: {
         tags: ["Wallet"],
         summary: "Remove a payout bank",
-        description: "Removes a saved payout bank belonging to the authenticated user.",
+        description:
+          "Removes a saved payout bank belonging to the authenticated user.",
         security: BEARER,
         parameters: [
           {
@@ -3050,7 +3366,10 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
                     exclusiveMinimum: true,
                     example: 100000,
                   },
-                  payout_bank_id: { type: "string", example: "686a1c4e3f9b2d0012ab3900" },
+                  payout_bank_id: {
+                    type: "string",
+                    example: "686a1c4e3f9b2d0012ab3900",
+                  },
                 },
               },
             },
@@ -3060,7 +3379,9 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
           "201": created(
             {
               type: "object",
-              properties: { withdrawal: { $ref: "#/components/schemas/WithdrawalRequest" } },
+              properties: {
+                withdrawal: { $ref: "#/components/schemas/WithdrawalRequest" },
+              },
             },
             "Withdrawal request submitted.",
           ),
@@ -3171,7 +3492,10 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
                 type: "object",
                 required: ["listing_id"],
                 properties: {
-                  listing_id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
+                  listing_id: {
+                    type: "string",
+                    example: "686a1c4e3f9b2d0012ab34cd",
+                  },
                 },
               },
             },
@@ -3181,11 +3505,17 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
           "201": created(
             {
               type: "object",
-              properties: { conversation: { $ref: "#/components/schemas/Conversation" } },
+              properties: {
+                conversation: { $ref: "#/components/schemas/Conversation" },
+              },
             },
             "Conversation ready.",
           ),
-          "400": errorEnvelope(400, "BAD_REQUEST", "You cannot message yourself."),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "You cannot message yourself.",
+          ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "404": { $ref: "#/components/responses/NotFound" },
         },
@@ -3338,7 +3668,8 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       get: {
         tags: ["Notifications"],
         summary: "Get unread notification count",
-        description: "Returns the number of unread notifications for the authenticated user.",
+        description:
+          "Returns the number of unread notifications for the authenticated user.",
         security: BEARER,
         responses: {
           "200": ok(
@@ -3357,7 +3688,8 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       patch: {
         tags: ["Notifications"],
         summary: "Mark all notifications as read",
-        description: "Marks all of the authenticated user's unread notifications as read.",
+        description:
+          "Marks all of the authenticated user's unread notifications as read.",
         security: BEARER,
         responses: {
           "200": ok(null, "All notifications marked as read."),
@@ -3370,7 +3702,8 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       patch: {
         tags: ["Notifications"],
         summary: "Mark a notification as read",
-        description: "Marks a single notification belonging to the authenticated user as read.",
+        description:
+          "Marks a single notification belonging to the authenticated user as read.",
         security: BEARER,
         parameters: [
           {
@@ -3402,7 +3735,9 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
           "200": ok(
             {
               type: "object",
-              properties: { user: { $ref: "#/components/schemas/UserProfile" } },
+              properties: {
+                user: { $ref: "#/components/schemas/UserProfile" },
+              },
             },
             "Profile details.",
           ),
@@ -3424,13 +3759,19 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
                 properties: {
                   first_name: { type: "string", minLength: 1, maxLength: 50 },
                   last_name: { type: "string", minLength: 1, maxLength: 50 },
-                  phone_number: { type: "string", minLength: 7, maxLength: 20, example: "+2348012345678" },
+                  phone_number: {
+                    type: "string",
+                    minLength: 7,
+                    maxLength: 20,
+                    example: "+2348012345678",
+                  },
                   about: { type: "string", maxLength: 500 },
                   address: { type: "string", maxLength: 300 },
                   profile_photo: {
                     type: "string",
                     format: "uri",
-                    description: "Cloudinary URL returned by `POST /uploads/images`.",
+                    description:
+                      "Cloudinary URL returned by `POST /uploads/images`.",
                   },
                 },
               },
@@ -3441,7 +3782,9 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
           "200": ok(
             {
               type: "object",
-              properties: { user: { $ref: "#/components/schemas/UserProfile" } },
+              properties: {
+                user: { $ref: "#/components/schemas/UserProfile" },
+              },
             },
             "Profile updated.",
           ),
@@ -3528,7 +3871,10 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
           "Submits a request for seller verification, reviewed manually by the TradeNG team. Can only be requested once while pending.",
         security: BEARER,
         responses: {
-          "200": ok(null, "Verification request submitted. We'll review and notify you."),
+          "200": ok(
+            null,
+            "Verification request submitted. We'll review and notify you.",
+          ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "404": { $ref: "#/components/responses/NotFound" },
           "409": errorEnvelope(
@@ -3544,7 +3890,8 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       patch: {
         tags: ["Profile"],
         summary: "Update my password",
-        description: "Updates the authenticated user's password after verifying the current one.",
+        description:
+          "Updates the authenticated user's password after verifying the current one.",
         security: BEARER,
         requestBody: {
           required: true,
@@ -3570,7 +3917,11 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
         responses: {
           "200": ok(null, "Password updated successfully."),
           "400": { $ref: "#/components/responses/ValidationError" },
-          "401": errorEnvelope(401, "UNAUTHORIZED", "Current password is incorrect."),
+          "401": errorEnvelope(
+            401,
+            "UNAUTHORIZED",
+            "Current password is incorrect.",
+          ),
           "404": { $ref: "#/components/responses/NotFound" },
         },
       },
@@ -3604,7 +3955,9 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
             {
               type: "object",
               properties: {
-                notification_settings: { $ref: "#/components/schemas/NotificationSettings" },
+                notification_settings: {
+                  $ref: "#/components/schemas/NotificationSettings",
+                },
               },
             },
             "Notification settings updated.",
@@ -3633,7 +3986,10 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
                   items: {
                     type: "object",
                     properties: {
-                      id: { type: "string", example: "686a1c4e3f9b2d0012ab3f00" },
+                      id: {
+                        type: "string",
+                        example: "686a1c4e3f9b2d0012ab3f00",
+                      },
                       listing: { $ref: "#/components/schemas/Listing" },
                     },
                   },
@@ -3651,7 +4007,8 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       post: {
         tags: ["Profile"],
         summary: "Add a listing to my wishlist",
-        description: "Adds a listing to the authenticated user's wishlist. Idempotent.",
+        description:
+          "Adds a listing to the authenticated user's wishlist. Idempotent.",
         security: BEARER,
         parameters: [
           {
@@ -3664,7 +4021,10 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
           },
         ],
         responses: {
-          "201": created({ nullable: true, example: null }, "Added to wishlist."),
+          "201": created(
+            { nullable: true, example: null },
+            "Added to wishlist.",
+          ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "404": { $ref: "#/components/responses/NotFound" },
         },
@@ -3672,7 +4032,8 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       delete: {
         tags: ["Profile"],
         summary: "Remove a listing from my wishlist",
-        description: "Removes a listing from the authenticated user's wishlist. Idempotent.",
+        description:
+          "Removes a listing from the authenticated user's wishlist. Idempotent.",
         security: BEARER,
         parameters: [
           {
@@ -3745,7 +4106,12 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
                 type: "object",
                 required: ["name", "email", "subject", "message"],
                 properties: {
-                  name: { type: "string", minLength: 1, maxLength: 100, example: "Adeola Bello" },
+                  name: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 100,
+                    example: "Adeola Bello",
+                  },
                   email: {
                     type: "string",
                     format: "email",
@@ -3761,7 +4127,8 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
                     type: "string",
                     minLength: 10,
                     maxLength: 2000,
-                    example: "My withdrawal has been pending for 3 days, can you check on it?",
+                    example:
+                      "My withdrawal has been pending for 3 days, can you check on it?",
                   },
                 },
               },
@@ -3769,7 +4136,10 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
           },
         },
         responses: {
-          "201": created({ nullable: true, example: null }, "Your message has been received. We'll get back to you shortly."),
+          "201": created(
+            { nullable: true, example: null },
+            "Your message has been received. We'll get back to you shortly.",
+          ),
           "400": { $ref: "#/components/responses/ValidationError" },
         },
       },
@@ -3779,24 +4149,28 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
   tags: [
     {
       name: "Auth",
-      description: "User registration, email verification, password reset, and authentication.",
+      description:
+        "User registration, email verification, password reset, and authentication.",
     },
     {
       name: "Listings",
-      description: "Create and manage marketplace listings — drafts, publishing, browsing, and direct purchase.",
+      description:
+        "Create and manage marketplace listings — drafts, publishing, browsing, and direct purchase.",
     },
     {
       name: "Discovery",
       description:
-        "Public, unauthenticated discovery surfaces: top sellers, seller-curated featured listings, best-selling listings, and recent listings from verified sellers only.",
+        "Public, unauthenticated discovery surfaces: platform stats, top sellers, seller-curated featured listings, best-selling listings, and recent listings from verified sellers only.",
     },
     {
       name: "Offers",
-      description: "Negotiate a listing's price via an offer/counter-offer thread between buyer and seller.",
+      description:
+        "Negotiate a listing's price via an offer/counter-offer thread between buyer and seller.",
     },
     {
       name: "Transactions",
-      description: "Escrow transaction lifecycle management — checkout, receipt confirmation, release, and disputes.",
+      description:
+        "Escrow transaction lifecycle management — checkout, receipt confirmation, release, and disputes.",
     },
     {
       name: "Categories",
@@ -3805,15 +4179,18 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
     },
     {
       name: "Uploads",
-      description: "Upload listing images and video to Cloudinary ahead of creating or updating a listing.",
+      description:
+        "Upload listing images and video to Cloudinary ahead of creating or updating a listing.",
     },
     {
       name: "Wallet",
-      description: "View wallet balances and ledger, manage payout banks, and request withdrawals.",
+      description:
+        "View wallet balances and ledger, manage payout banks, and request withdrawals.",
     },
     {
       name: "Orders",
-      description: "Read-only buyer/seller order views over transactions, with a computed lifecycle timeline.",
+      description:
+        "Read-only buyer/seller order views over transactions, with a computed lifecycle timeline.",
     },
     {
       name: "Conversations",
@@ -3827,11 +4204,13 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
     },
     {
       name: "Profile",
-      description: "Manage the authenticated user's profile, stats, trust score, verification, and wishlist.",
+      description:
+        "Manage the authenticated user's profile, stats, trust score, verification, and wishlist.",
     },
     {
       name: "Reviews",
-      description: "Leave and browse ratings and reviews left between buyers and sellers after a completed transaction.",
+      description:
+        "Leave and browse ratings and reviews left between buyers and sellers after a completed transaction.",
     },
     {
       name: "Support",
