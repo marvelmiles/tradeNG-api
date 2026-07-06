@@ -2553,7 +2553,7 @@ Fetching the accepted offer afterward (e.g. via \`GET /offers/received\`, \`GET 
         description: `
 Creates a **Nomba** checkout session for the transaction and returns a \`checkout_link\` the buyer should be redirected to in order to complete payment.
 
-The platform confirms payment automatically via the webhook at \`POST /api/webhooks/payment\`.
+The platform confirms payment automatically via the webhook at \`POST /api/webhooks/payment\`. Nomba also redirects the buyer to \`{FRONTEND_URL}/payment-success/{transaction_id}\` after they complete or abandon payment (Nomba appends \`orderReference\` as a query param).
 
 - Only the **buyer** can call this.
 - Transaction must be in \`PENDING_PAYMENT\` status.

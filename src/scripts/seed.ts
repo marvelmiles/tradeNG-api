@@ -34,37 +34,24 @@ const SEED_PASSWORD = "Passw0rd1";
 const daysAgo = (n: number): Date =>
   new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
+// Picsum Photos serves real, publicly-hosted stock photos with no API key —
+// `seed` makes the same URL always resolve to the same image, so re-seeding
+// is deterministic without depending on Cloudinary or any project account.
+const stockImage = (seed: string, width = 800, height = 600): string =>
+  `https://picsum.photos/seed/${slugify(seed)}/${width}/${height}`;
+
+// Pravatar serves free, publicly-hosted placeholder avatar photos, seeded the
+// same way for deterministic per-user results.
+const avatar = (seed: string): string =>
+  `https://i.pravatar.cc/300?u=${encodeURIComponent(seed)}`;
+
 const DEFAULT_CATEGORIES: { name: string; image: string }[] = [
-  {
-    name: "Gadgets",
-    image:
-      "https://res.cloudinary.com/demo/image/upload/v1/tradeng/categories/gadgets.png",
-  },
-  {
-    name: "Furniture",
-    image:
-      "https://res.cloudinary.com/demo/image/upload/v1/tradeng/categories/furniture.png",
-  },
-  {
-    name: "Fashion",
-    image:
-      "https://res.cloudinary.com/demo/image/upload/v1/tradeng/categories/fashion.png",
-  },
-  {
-    name: "Electronics",
-    image:
-      "https://res.cloudinary.com/demo/image/upload/v1/tradeng/categories/electronics.png",
-  },
-  {
-    name: "Home",
-    image:
-      "https://res.cloudinary.com/demo/image/upload/v1/tradeng/categories/home.png",
-  },
-  {
-    name: "Others",
-    image:
-      "https://res.cloudinary.com/demo/image/upload/v1/tradeng/categories/others.png",
-  },
+  { name: "Gadgets", image: stockImage("category-gadgets") },
+  { name: "Furniture", image: stockImage("category-furniture") },
+  { name: "Fashion", image: stockImage("category-fashion") },
+  { name: "Electronics", image: stockImage("category-electronics") },
+  { name: "Home", image: stockImage("category-home") },
+  { name: "Others", image: stockImage("category-others") },
 ];
 
 // Collections fully owned by this seed script — wiped and rebuilt on every run.
@@ -134,6 +121,7 @@ const seedUsers = async (): Promise<SeedUsers> => {
       password: hashed,
       status: "ACTIVE",
       is_verified_seller: false,
+      profile_photo: avatar(overrides.email),
       ...overrides,
     });
 
@@ -232,14 +220,15 @@ const seedListings = async (
   const home = categories["home"]._id;
 
   const base = {
-    images: [
-      "https://res.cloudinary.com/demo/image/upload/v1/tradeng/listings/sample-1.jpg",
-      "https://res.cloudinary.com/demo/image/upload/v1/tradeng/listings/sample-2.jpg",
-    ],
     delivery_options: ["SELF_DELIVERY", "PICKUP"],
     pickup_address: "Victoria Island, Lagos",
     status: "ACTIVE" as const,
   };
+
+  const listingImages = (item_name: string): string[] => [
+    stockImage(item_name),
+    stockImage(`${item_name}-2`),
+  ];
 
   const [
     l1_active,
@@ -263,6 +252,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: 'MacBook Pro 14" M2',
+      images: listingImages("MacBook Pro 14 M2"),
       category_id: gadgets,
       condition: "LIKE_NEW",
       description:
@@ -274,6 +264,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "iPhone 13 Pro 128GB",
+      images: listingImages("iPhone 13 Pro 128GB"),
       category_id: electronics,
       condition: "USED",
       defect_description:
@@ -302,6 +293,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Samsung Galaxy S22 Ultra",
+      images: listingImages("Samsung Galaxy S22 Ultra"),
       category_id: gadgets,
       condition: "LIKE_NEW",
       description:
@@ -313,6 +305,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Sony WH-1000XM4 Headphones",
+      images: listingImages("Sony WH-1000XM4 Headphones"),
       category_id: electronics,
       condition: "LIKE_NEW",
       description:
@@ -324,6 +317,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "iPad Air 5th Gen",
+      images: listingImages("iPad Air 5th Gen"),
       category_id: gadgets,
       condition: "USED",
       description:
@@ -335,6 +329,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "6-Seater Dining Table Set",
+      images: listingImages("6-Seater Dining Table Set"),
       category_id: furniture,
       condition: "USED",
       description:
@@ -346,6 +341,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Bookshelf Unit",
+      images: listingImages("Bookshelf Unit"),
       category_id: furniture,
       condition: "USED",
       description:
@@ -358,6 +354,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Queen Size Bed Frame",
+      images: listingImages("Queen Size Bed Frame"),
       category_id: furniture,
       condition: "LIKE_NEW",
       description: "Queen bed frame with headboard, used for under a year.",
@@ -368,6 +365,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "3-Seater Sofa",
+      images: listingImages("3-Seater Sofa"),
       category_id: home,
       condition: "USED",
       description: "Comfortable fabric sofa, some wear on the armrests.",
@@ -378,6 +376,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Designer Ankara Jacket",
+      images: listingImages("Designer Ankara Jacket"),
       category_id: fashion,
       condition: "NEW",
       description: "Custom-tailored Ankara jacket, size L, never worn.",
@@ -388,6 +387,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Gucci Leather Belt",
+      images: listingImages("Gucci Leather Belt"),
       category_id: fashion,
       condition: "LIKE_NEW",
       description:
@@ -399,6 +399,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Nike Air Jordan 1 Retro",
+      images: listingImages("Nike Air Jordan 1 Retro"),
       category_id: fashion,
       condition: "USED",
       description: "Size 42, worn a handful of times, no major damage.",
@@ -409,6 +410,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Dell XPS 13 Laptop",
+      images: listingImages("Dell XPS 13 Laptop"),
       category_id: electronics,
       condition: "LIKE_NEW",
       description: "Dell XPS 13, i7, 16GB RAM, 1TB SSD. Excellent condition.",
@@ -419,6 +421,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "JBL Flip 6 Bluetooth Speaker",
+      images: listingImages("JBL Flip 6 Bluetooth Speaker"),
       category_id: gadgets,
       condition: "NEW",
       description: "Sealed, never opened. Bought as a gift, no longer needed.",
@@ -429,6 +432,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "PlayStation 5 Console",
+      images: listingImages("PlayStation 5 Console"),
       category_id: gadgets,
       condition: "LIKE_NEW",
       description: "PS5 disc edition with one extra controller. Light usage.",
@@ -439,6 +443,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Canon EOS M50 Camera",
+      images: listingImages("Canon EOS M50 Camera"),
       category_id: electronics,
       condition: "USED",
       description:
@@ -715,9 +720,7 @@ const seedTransactionsWalletAndReviews = async (
         raised_by: fixture.buyer._id,
         description:
           "Item arrived with a cracked screen that wasn't disclosed in the listing.",
-        evidence_urls: [
-          "https://res.cloudinary.com/demo/image/upload/v1/tradeng/disputes/evidence-1.jpg",
-        ],
+        evidence_urls: [stockImage(`dispute-evidence-${tx._id.toString()}`)],
         status: "OPEN",
         created_at: daysAgo(created_days_ago - 2),
       });

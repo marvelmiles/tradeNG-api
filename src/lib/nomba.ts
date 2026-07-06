@@ -41,7 +41,7 @@ interface CreateCheckoutOrderParams {
   order_reference: string;
   amount: number;
   customer_email: string;
-  callback_url: string;
+  callback_url?: string;
 }
 
 interface CreateCheckoutOrderResult {

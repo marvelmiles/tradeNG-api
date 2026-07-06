@@ -22,6 +22,30 @@ import {
 import { markTransactionPaid } from "@/api/v1/services/transaction.service";
 import type { DisputeInput } from "@/api/v1/validators/transaction";
 
+// callbackUrl is optional, and Nomba appends `orderReference` as a query
+// param on redirect — see
+// https://developer.nomba.com/docs/products/accept-payment/create-checkout-order
+// Their docs describe it as an HTTPS URL, but that's a production
+// expectation, not a hard sandbox requirement; omitting it entirely (e.g. by
+// rejecting a plain-HTTP FRONTEND_URL in local dev) just makes Nomba redirect
+// the buyer to its own homepage instead of our payment-success page, so we
+// always send it as long as it's a syntactically valid URL.
+const buildCheckoutCallbackUrl = (
+  transaction_id: string,
+): string | undefined => {
+  // const url = `${env.FRONTEND_URL}/payment-success/${transaction_id}`;
+  const url = `${"https://trade-ng-kappa.vercel.app"}/callback`;
+
+  try {
+    console.log("building callback", url);
+    new URL(url);
+    return url;
+  } catch {
+    console.log("invalid urll");
+    return undefined;
+  }
+};
+
 type LeanUser = {
   _id: Types.ObjectId;
   first_name: string;
@@ -205,7 +229,7 @@ export const checkoutTransaction = asyncHandler(
         order_reference: tx._id.toString(),
         amount: tx.amount,
         customer_email: req.user!.email,
-        callback_url: `${env.FRONTEND_URL}/callback`,
+        callback_url: buildCheckoutCallbackUrl(tx._id.toString()),
       });
     } catch {
       throw new AppError("Payment provider unavailable, please try again", 502);
