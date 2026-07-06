@@ -15,6 +15,9 @@ interface CreateNotificationParams {
 
 const OFFER_TYPES = new Set<NotificationType>(["OFFER_RECEIVED", "OFFER_ACCEPTED", "OFFER_COUNTERED", "OFFER_DECLINED"]);
 
+export const getUnreadCount = (user_id: string | Types.ObjectId): Promise<number> =>
+  Notification.countDocuments({ user_id, read_at: null });
+
 export const createNotification = async (params: CreateNotificationParams) => {
   const notification = await Notification.create({
     user_id: params.user_id,
@@ -31,16 +34,35 @@ export const createNotification = async (params: CreateNotificationParams) => {
   const in_app_enabled = OFFER_TYPES.has(params.type) ? settings?.in_app_offers : settings?.in_app_general;
 
   if (in_app_enabled !== false) {
+    const unread_count = await getUnreadCount(params.user_id);
+
     emitToUser(params.user_id.toString(), "notification:new", {
       id: notification._id.toString(),
       type: notification.type,
       title: notification.title,
       body: notification.body,
+      related_listing_id: notification.related_listing_id?.toString() ?? null,
+      related_transaction_id: notification.related_transaction_id?.toString() ?? null,
+      related_conversation_id: notification.related_conversation_id?.toString() ?? null,
       created_at: notification.created_at,
+      unread_count,
     });
   }
 
   return notification;
+};
+
+// Keeps a user's other open tabs/devices in sync when notifications are read elsewhere.
+export const emitNotificationRead = async (
+  user_id: string | Types.ObjectId,
+  notification_id: string,
+): Promise<void> => {
+  const unread_count = await getUnreadCount(user_id);
+  emitToUser(user_id.toString(), "notification:read", { id: notification_id, unread_count });
+};
+
+export const emitAllNotificationsRead = (user_id: string | Types.ObjectId): void => {
+  emitToUser(user_id.toString(), "notification:read-all", { unread_count: 0 });
 };
 
 export const shouldSendEmail = async (user_id: string | Types.ObjectId, type: NotificationType): Promise<boolean> => {

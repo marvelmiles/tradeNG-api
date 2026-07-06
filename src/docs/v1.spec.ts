@@ -207,6 +207,135 @@ All list endpoints support **cursor-based** (default) and **page-based** paginat
 }
 \`\`\`
 
+## Realtime (Socket.io)
+
+In addition to the REST endpoints, the server runs a Socket.io gateway on the same host (no separate port or path — same origin as the REST API).
+
+### Connecting
+
+Pass the JWT from \`POST /auth/login\` (or \`/auth/verify-email\`) as \`auth.token\` in the handshake:
+
+\`\`\`js
+import { io } from "socket.io-client";
+
+const socket = io("<SERVER_URL>", {
+  auth: { token: "<jwt>" },
+});
+
+socket.on("connect", () => console.log("connected", socket.id));
+
+// Handshake failures surface here, not as an "error" event:
+socket.on("connect_error", (err) => console.error(err.message));
+\`\`\`
+
+Handshake rejection reasons (\`err.message\`):
+
+| Message | Cause |
+|---|---|
+| \`Authentication token required\` | No \`auth.token\` sent. |
+| \`Invalid or expired token\` | Token is malformed or past its \`exp\`. |
+| \`Account not authorized\` | Account is not \`ACTIVE\` (unverified, suspended, or deleted). |
+| \`Session has been signed out\` | Token was issued before the user's last \`POST /auth/signout\`. |
+
+On success, the socket is automatically joined to a private \`user:<id>\` room — this is what makes notification delivery "just work" with no extra client action. Conversation rooms (below) must be joined explicitly.
+
+Once connected, any other in-session error (e.g. acting on a conversation you're not part of) is delivered as a generic event:
+
+\`\`\`js
+socket.on("error", (payload) => console.error(payload.message));
+// payload: { "message": "Not a participant in this conversation" }
+\`\`\`
+
+### Conversations
+
+**1. Join a conversation** so you start receiving its \`message:new\`/\`typing:*\` events. Do this for every conversation the buyer/seller screen has open (there's no bulk-join — one \`conversation:join\` per \`conversation_id\`):
+
+\`\`\`js
+// → emit
+socket.emit("conversation:join", { conversation_id: "687a2b1e9c0d4f0012ef5678" });
+\`\`\`
+
+There's no ack event for a successful join; if you're not a buyer/seller on that conversation you'll instead get the generic \`error\` event shown above and will not receive its messages.
+
+**2. Send a message.** This is the realtime equivalent of \`POST /conversations/{id}/messages\` — use whichever fits your client; both end up calling the same persistence logic and both broadcast \`message:new\` to everyone in the room (including your own other tabs).
+
+\`\`\`js
+// → emit
+socket.emit("message:send", {
+  conversation_id: "687a2b1e9c0d4f0012ef5678",
+  body: "Is this still available?",
+});
+\`\`\`
+
+A blank/whitespace-only \`body\` is silently ignored (no error emitted). \`message:send\` only creates plain \`TEXT\` messages — \`OFFER\`/\`SYSTEM\` messages are created server-side by the Offers flow and delivered the same way over \`message:new\`.
+
+\`\`\`js
+// ← listen
+socket.on("message:new", (message) => { /* ... */ });
+\`\`\`
+\`\`\`json
+{
+  "id": "687a2c0f9c0d4f0012ef56ab",
+  "conversation_id": "687a2b1e9c0d4f0012ef5678",
+  "sender_id": "686a1c4e3f9b2d0012ab3400",
+  "message_type": "TEXT",
+  "body": "Is this still available?",
+  "created_at": "2026-07-06T10:15:30.000Z"
+}
+\`\`\`
+
+The message's recipient (whichever of buyer/seller didn't send it) also gets a \`NEW_MESSAGE\` entry through the notification pipeline below — so a client that isn't currently viewing the conversation still sees it via \`notification:new\`.
+
+**3. Typing indicator** — fire on keystroke/blur; there's no payload validation or persistence, it's a bare broadcast to the room:
+
+\`\`\`js
+// → emit
+socket.emit("typing:start", { conversation_id: "687a2b1e9c0d4f0012ef5678" });
+socket.emit("typing:stop", { conversation_id: "687a2b1e9c0d4f0012ef5678" });
+
+// ← listen (fired to the other participant, not echoed back to the sender)
+socket.on("typing:start", (payload) => { /* ... */ });
+socket.on("typing:stop", (payload) => { /* ... */ });
+\`\`\`
+\`\`\`json
+{ "conversation_id": "687a2b1e9c0d4f0012ef5678", "user_id": "686a1c4e3f9b2d0012ab3400" }
+\`\`\`
+
+### Notifications
+
+No client action is needed to subscribe — every connected socket already sits in its own \`user:<id>\` room. Just listen:
+
+\`\`\`js
+socket.on("notification:new", (payload) => { /* ... */ });
+\`\`\`
+\`\`\`json
+{
+  "id": "686a1c4e3f9b2d0012ab3d00",
+  "type": "OFFER_RECEIVED",
+  "title": "New offer received",
+  "body": "Adeola offered ₦230,000 for \\"iPhone 14 Pro Max\\"",
+  "related_listing_id": "686a1c4e3f9b2d0012ab3300",
+  "related_transaction_id": null,
+  "related_conversation_id": "687a2b1e9c0d4f0012ef5678",
+  "created_at": "2026-07-06T10:15:30.000Z",
+  "unread_count": 4
+}
+\`\`\`
+
+This fires for every \`NotificationType\` on the \`Notification\` schema below (offers, payments, disputes, reviews, messages, withdrawals, seller verification, etc.) — same shape as a REST \`Notification\` object, plus a live \`unread_count\` so the client can update a badge without a follow-up \`GET /notifications/unread-count\` call. It's skipped entirely (no event fires) if the user has the relevant \`notification_settings\` toggle (\`in_app_general\`/\`in_app_offers\`) turned off — the notification still exists and is visible via \`GET /notifications\`, it just isn't pushed live.
+
+If the same user has multiple tabs/devices connected, marking notifications as read on one syncs the badge on the others:
+
+\`\`\`js
+socket.on("notification:read", (payload) => { /* ... */ });
+// payload: { "id": "686a1c4e3f9b2d0012ab3d00", "unread_count": 3 }
+
+socket.on("notification:read-all", (payload) => { /* ... */ });
+// payload: { "unread_count": 0 }
+\`\`\`
+
+\`notification:read\` fires after \`PATCH /notifications/{id}/read\` actually flips an unread notification (a no-op call, e.g. re-marking an already-read one, fires nothing); \`notification:read-all\` fires the same way after \`PATCH /notifications/read-all\`.
+
 ## Escrow Flow
 
 \`\`\`
@@ -3527,11 +3656,12 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
     {
       name: "Conversations",
       description:
-        "Buyer–seller messaging tied to a listing. In addition to the REST endpoints below, real-time delivery happens over Socket.io on the same server. Connect with `{ auth: { token: \"<jwt>\" } }` in the socket handshake, then use events `conversation:join`, `message:send`, `message:new`, `typing:start`, `typing:stop`, and `notification:new`.",
+        "Buyer–seller messaging tied to a listing. Real-time delivery also happens over Socket.io — see the **Realtime (Socket.io)** section above for the connection handshake and event contracts.",
     },
     {
       name: "Notifications",
-      description: "In-app notifications for offers, payments, disputes, reviews, messages, and more.",
+      description:
+        "In-app notifications for offers, payments, disputes, reviews, messages, and more. Delivered live over Socket.io as well as via the REST endpoints below — see the **Realtime (Socket.io)** section above for the `notification:new`/`notification:read`/`notification:read-all` event contracts.",
     },
     {
       name: "Profile",

@@ -8,6 +8,7 @@ import {
   buildCursorFilter,
 } from "@/utils/pagination";
 import { Notification } from "@/models/v1/notification.model";
+import { emitNotificationRead, emitAllNotificationsRead } from "@/api/v1/services/notification.service";
 
 const formatNotification = (notification: {
   _id: { toString(): string };
@@ -71,11 +72,23 @@ export const getUnreadCount = asyncHandler(async (req: Request, res: Response) =
 
 export const markNotificationRead = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  await Notification.updateOne({ _id: id, user_id: req.user!.id, read_at: null }, { read_at: new Date() });
+  const user_id = req.user!.id;
+
+  const result = await Notification.updateOne({ _id: id, user_id, read_at: null }, { read_at: new Date() });
+  if (result.modifiedCount > 0) {
+    await emitNotificationRead(user_id, id);
+  }
+
   return sendSuccess({ res, message: "Notification marked as read" });
 });
 
 export const markAllNotificationsRead = asyncHandler(async (req: Request, res: Response) => {
-  await Notification.updateMany({ user_id: req.user!.id, read_at: null }, { read_at: new Date() });
+  const user_id = req.user!.id;
+
+  const result = await Notification.updateMany({ user_id, read_at: null }, { read_at: new Date() });
+  if (result.modifiedCount > 0) {
+    emitAllNotificationsRead(user_id);
+  }
+
   return sendSuccess({ res, message: "All notifications marked as read" });
 });

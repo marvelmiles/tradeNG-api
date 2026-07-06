@@ -9,6 +9,7 @@ import { createNotification } from "@/api/v1/services/notification.service";
 
 interface JwtPayload {
   user_id: string;
+  token_version: number;
 }
 
 let io: Server | null = null;
@@ -36,9 +37,15 @@ export const initSocket = (httpServer: HttpServer): Server => {
       return;
     }
 
-    const user = await User.findById(payload.user_id).select("status").lean();
+    const user = await User.findById(payload.user_id)
+      .select("status token_version")
+      .lean();
     if (!user || user.status !== "ACTIVE") {
       next(new Error("Account not authorized"));
+      return;
+    }
+    if ((payload.token_version ?? 0) !== user.token_version) {
+      next(new Error("Session has been signed out"));
       return;
     }
 
