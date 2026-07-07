@@ -5,6 +5,7 @@ TradeNG is a peer-to-peer escrow marketplace where sellers list items, buyers pu
 ## Links
 
 - **Frontend (web app):** https://trade-ng-kappa.vercel.app/
+- **Frontend repo:** https://github.com/dprince001/TradeNG
 - **API docs (Swagger UI):** `<SERVER_URL>/api/docs` (e.g. `http://localhost:5000/api/docs` locally)
 - **API base URL:** `<SERVER_URL>/api/v1`
 - **Health check:** `<SERVER_URL>/api/health`
