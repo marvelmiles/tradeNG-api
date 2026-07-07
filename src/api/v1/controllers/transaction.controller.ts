@@ -34,14 +34,11 @@ const buildCheckoutCallbackUrl = (
   transaction_id: string,
 ): string | undefined => {
   const url = `${env.FRONTEND_URL}/payment-status/${transaction_id}`;
-  // const url = `${"https://trade-ng-kappa.vercel.app"}/callback`;
 
   try {
-    console.log("building callback", url);
     new URL(url);
     return url;
   } catch {
-    console.log("invalid urll");
     return undefined;
   }
 };
@@ -108,6 +105,30 @@ const formatTransaction = (tx: LeanTransaction) => {
   };
 };
 
+// Core verification logic shared by `verifyTransaction` and `getTransaction`:
+// re-checks a still-PENDING_PAYMENT transaction against Nomba and marks it
+// PAID if the provider confirms payment. Returns the actual up-to-date status.
+const verifyPendingPayment = async (tx: {
+  _id: Types.ObjectId;
+  status: string;
+  payment_ref: string | null;
+}): Promise<string> => {
+  if (tx.status !== "PENDING_PAYMENT" || !tx.payment_ref) return tx.status;
+
+  let result;
+  try {
+    result = await verifyNombaTransaction(tx.payment_ref);
+  } catch {
+    throw new AppError("Payment provider unavailable, please try again", 502);
+  }
+
+  if (result.success) {
+    return (await markTransactionPaid(tx._id)) ?? tx.status;
+  }
+
+  return tx.status;
+};
+
 export const getTransaction = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -128,6 +149,10 @@ export const getTransaction = asyncHandler(
 
     if (buyer_id !== user_id && seller_id !== user_id) {
       throw new AppError("Forbidden", 403);
+    }
+
+    if (tx.status === "PENDING_PAYMENT") {
+      tx.status = (await verifyPendingPayment(tx)) as typeof tx.status;
     }
 
     return sendSuccess({
@@ -270,23 +295,7 @@ export const verifyTransaction = asyncHandler(
       );
     }
 
-    let status: string = tx.status;
-
-    if (tx.status === "PENDING_PAYMENT") {
-      let result;
-      try {
-        result = await verifyNombaTransaction(tx.payment_ref);
-      } catch {
-        throw new AppError(
-          "Payment provider unavailable, please try again",
-          502,
-        );
-      }
-
-      if (result.success) {
-        status = (await markTransactionPaid(tx._id)) ?? status;
-      }
-    }
+    const status = await verifyPendingPayment(tx);
 
     return sendSuccess({
       res,
