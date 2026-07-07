@@ -15,8 +15,30 @@ import { EmailService } from "@/api/v1/services/email.service";
 import { createTransactionForSale } from "@/api/v1/services/transaction.service";
 import { getOrCreateConversation, persistMessage } from "@/api/v1/services/message.service";
 import { createNotification } from "@/api/v1/services/notification.service";
-import { emitToConversation } from "@/lib/socket";
+import { emitToConversation, emitToUser } from "@/lib/socket";
 import type { CreateOfferInput, CounterOfferInput, DeclineOfferInput } from "@/api/v1/validators/offer";
+
+const emitOfferUpdate = (offer: {
+  _id: Types.ObjectId;
+  listing_id: Types.ObjectId;
+  buyer_id: Types.ObjectId;
+  seller_id: Types.ObjectId;
+  status: string;
+  amount: number;
+  parent_offer_id?: Types.ObjectId | null;
+  transaction_id?: Types.ObjectId | null;
+}): void => {
+  const payload = {
+    id: offer._id.toString(),
+    listing_id: offer.listing_id.toString(),
+    status: offer.status,
+    amount: offer.amount,
+    parent_offer_id: offer.parent_offer_id?.toString() ?? null,
+    transaction_id: offer.transaction_id?.toString() ?? null,
+  };
+  emitToUser(offer.buyer_id.toString(), "offer:updated", payload);
+  emitToUser(offer.seller_id.toString(), "offer:updated", payload);
+};
 
 const notifyOfferInChat = async (
   listing_id: string,
@@ -35,6 +57,14 @@ const notifyOfferInChat = async (
     offer_id,
   });
 
+  const offerWithTransaction = await Offer.findById(offer_id)
+    .select("transaction_id")
+    .populate<{ transaction_id: { _id: Types.ObjectId; status: string } | null }>("transaction_id", "status")
+    .lean();
+  const transaction = offerWithTransaction?.transaction_id;
+  const transaction_status =
+    transaction && !(transaction instanceof Types.ObjectId) ? transaction.status : undefined;
+
   emitToConversation(conversation._id.toString(), "message:new", {
     id: message._id.toString(),
     conversation_id: conversation._id.toString(),
@@ -42,6 +72,7 @@ const notifyOfferInChat = async (
     message_type: message.message_type,
     body: message.body,
     offer_id,
+    transaction_status,
     created_at: message.created_at,
   });
 };
@@ -60,6 +91,34 @@ const formatUser = (user: Types.ObjectId | LeanUser | null | undefined) => {
   return { id: user._id.toString(), first_name: user.first_name, last_name: user.last_name };
 };
 
+// Who proposed the current row. Falls back for pre-migration rows that predate
+// `proposed_by`: a countered row (has a parent) was always seller-initiated back
+// then, since only sellers could counter; anything else was buyer-initiated.
+const inferProposerId = (offer: LeanOffer): string => {
+  if (offer.proposed_by) return offer.proposed_by.toString();
+  const buyer = offer.buyer_id as LeanUser;
+  const seller = offer.seller_id as LeanUser;
+  return offer.parent_offer_id ? seller._id.toString() : buyer._id.toString();
+};
+
+// Resolves the two parties on the offer and asserts `actor_id` is the one whose
+// turn it is to respond (accept/counter/decline) to the current PENDING/COUNTERED row.
+const resolveRespondingParties = (offer: LeanOffer, actor_id: string) => {
+  const buyer = offer.buyer_id as LeanUser;
+  const seller = offer.seller_id as LeanUser;
+  const is_buyer = buyer._id.toString() === actor_id;
+  const is_seller = seller._id.toString() === actor_id;
+  if (!is_buyer && !is_seller) throw new AppError("Forbidden", 403);
+
+  const proposer_id = inferProposerId(offer);
+  const recipient_id = proposer_id === buyer._id.toString() ? seller._id.toString() : buyer._id.toString();
+  if (actor_id !== recipient_id) {
+    throw new AppError("It is not your turn to respond to this offer", 403);
+  }
+
+  return { buyer, seller, self: is_buyer ? buyer : seller, other: is_buyer ? seller : buyer };
+};
+
 const formatOffer = (offer: LeanOffer) => {
   const { _id, listing_id, buyer_id, seller_id, ...rest } = offer;
 
@@ -76,6 +135,7 @@ const formatOffer = (offer: LeanOffer) => {
     id: _id.toString(),
     ...rest,
     parent_offer_id: rest.parent_offer_id?.toString() ?? null,
+    proposed_by: rest.proposed_by?.toString() ?? null,
     transaction_id: rest.transaction_id?.toString(),
     ...(listing ? { listing } : {}),
     buyer: formatUser(buyer_id),
@@ -103,6 +163,7 @@ export const createOffer = asyncHandler(async (req: Request, res: Response) => {
     seller_id: listing.seller_id._id,
     amount,
     note: note ?? null,
+    proposed_by: buyer_id,
   });
 
   const populated = await Offer.findById(offer._id)
@@ -125,6 +186,15 @@ export const createOffer = asyncHandler(async (req: Request, res: Response) => {
     `Offered ₦${amount.toLocaleString()}${note ? ` — ${note}` : ""}`,
     offer._id.toString()
   );
+
+  emitOfferUpdate({
+    _id: offer._id,
+    listing_id: offer.listing_id,
+    buyer_id: offer.buyer_id,
+    seller_id: offer.seller_id,
+    status: offer.status,
+    amount: offer.amount,
+  });
 
   await createNotification({
     user_id: listing.seller_id._id,
@@ -205,19 +275,20 @@ export const acceptOffer = asyncHandler(async (req: Request, res: Response) => {
 
   const offer = await Offer.findById(id)
     .populate<{ buyer_id: LeanUser }>("buyer_id", "email first_name last_name")
+    .populate<{ seller_id: LeanUser }>("seller_id", "email first_name last_name")
     .populate<{ listing_id: LeanListing }>("listing_id", "item_name status seller_id price")
     .lean();
 
   if (!offer) throw new AppError("Offer not found", 404);
   const listing = offer.listing_id as unknown as LeanListing;
-  if (listing.seller_id.toString() !== user_id) throw new AppError("Forbidden", 403);
   if (offer.status !== "PENDING" && offer.status !== "COUNTERED") {
     throw new AppError("This offer is no longer available", 400);
   }
+  const { buyer, seller, other } = resolveRespondingParties(offer as unknown as LeanOffer, user_id);
 
   const transaction = await createTransactionForSale(
-    { _id: listing._id, status: listing.status, seller_id: new Types.ObjectId(user_id), price: listing.price },
-    (offer.buyer_id as LeanUser)._id.toString(),
+    { _id: listing._id, status: listing.status, seller_id: seller._id, price: listing.price },
+    buyer._id.toString(),
     offer.amount
   );
 
@@ -231,11 +302,9 @@ export const acceptOffer = asyncHandler(async (req: Request, res: Response) => {
     { status: "DECLINED", responded_at: new Date() }
   );
 
-  const buyer = offer.buyer_id as LeanUser;
-
   await EmailService.sendOfferAccepted(
-    buyer.email!,
-    buyer.first_name,
+    other.email!,
+    other.first_name,
     listing.item_name,
     offer.amount,
     transaction._id.toString()
@@ -244,14 +313,25 @@ export const acceptOffer = asyncHandler(async (req: Request, res: Response) => {
   await notifyOfferInChat(
     listing._id.toString(),
     buyer._id.toString(),
-    user_id,
+    seller._id.toString(),
     user_id,
     `Accepted the offer of ₦${offer.amount.toLocaleString()}`,
     offer._id.toString()
   );
 
+  emitOfferUpdate({
+    _id: offer._id,
+    listing_id: listing._id,
+    buyer_id: buyer._id,
+    seller_id: seller._id,
+    status: "ACCEPTED",
+    amount: offer.amount,
+    parent_offer_id: offer.parent_offer_id,
+    transaction_id: transaction._id,
+  });
+
   await createNotification({
-    user_id: buyer._id,
+    user_id: other._id,
     type: "OFFER_ACCEPTED",
     title: "Offer accepted",
     body: `Your offer of ₦${offer.amount.toLocaleString()} on "${listing.item_name}" was accepted`,
@@ -283,45 +363,64 @@ export const counterOffer = asyncHandler(async (req: Request, res: Response) => 
 
   const offer = await Offer.findById(id)
     .populate<{ buyer_id: LeanUser }>("buyer_id", "email first_name last_name")
+    .populate<{ seller_id: LeanUser }>("seller_id", "email first_name last_name")
     .populate<{ listing_id: LeanListing }>("listing_id", "item_name status seller_id")
     .lean();
 
   if (!offer) throw new AppError("Offer not found", 404);
   const listing = offer.listing_id as unknown as LeanListing;
-  if (listing.seller_id.toString() !== user_id) throw new AppError("Forbidden", 403);
   if (offer.status !== "PENDING" && offer.status !== "COUNTERED") {
     throw new AppError("This offer is no longer available", 400);
   }
+  const { buyer, seller, other } = resolveRespondingParties(offer as unknown as LeanOffer, user_id);
 
   await Offer.findByIdAndUpdate(id, { status: "COUNTERED", responded_at: new Date() });
 
   const counter = await Offer.create({
     listing_id: listing._id,
-    buyer_id: (offer.buyer_id as LeanUser)._id,
-    seller_id: user_id,
+    buyer_id: buyer._id,
+    seller_id: seller._id,
     amount,
     note: note ?? null,
     parent_offer_id: offer._id,
+    proposed_by: user_id,
   });
 
-  const buyer = offer.buyer_id as LeanUser;
-
-  await EmailService.sendOfferCountered(buyer.email!, buyer.first_name, listing.item_name, amount);
+  await EmailService.sendOfferCountered(other.email!, other.first_name, listing.item_name, amount);
 
   await notifyOfferInChat(
     listing._id.toString(),
     buyer._id.toString(),
-    user_id,
+    seller._id.toString(),
     user_id,
     `Countered with ₦${amount.toLocaleString()}${note ? ` — ${note}` : ""}`,
     counter._id.toString()
   );
 
+  emitOfferUpdate({
+    _id: offer._id,
+    listing_id: listing._id,
+    buyer_id: buyer._id,
+    seller_id: seller._id,
+    status: "COUNTERED",
+    amount: offer.amount,
+    parent_offer_id: offer.parent_offer_id,
+  });
+  emitOfferUpdate({
+    _id: counter._id,
+    listing_id: counter.listing_id,
+    buyer_id: counter.buyer_id,
+    seller_id: counter.seller_id,
+    status: counter.status,
+    amount: counter.amount,
+    parent_offer_id: counter.parent_offer_id,
+  });
+
   await createNotification({
-    user_id: buyer._id,
+    user_id: other._id,
     type: "OFFER_COUNTERED",
-    title: "Seller countered your offer",
-    body: `The seller countered with ₦${amount.toLocaleString()} on "${listing.item_name}"`,
+    title: `${user_id === buyer._id.toString() ? "Buyer" : "Seller"} countered your offer`,
+    body: `${user_id === buyer._id.toString() ? "The buyer" : "The seller"} countered with ₦${amount.toLocaleString()} on "${listing.item_name}"`,
     related_listing_id: listing._id,
   }).catch(() => undefined);
 
@@ -340,32 +439,42 @@ export const declineOffer = asyncHandler(async (req: Request, res: Response) => 
 
   const offer = await Offer.findById(id)
     .populate<{ buyer_id: LeanUser }>("buyer_id", "email first_name")
+    .populate<{ seller_id: LeanUser }>("seller_id", "email first_name")
     .populate<{ listing_id: LeanListing }>("listing_id", "item_name seller_id")
     .lean();
 
   if (!offer) throw new AppError("Offer not found", 404);
   const listing = offer.listing_id as unknown as LeanListing;
-  if (listing.seller_id.toString() !== user_id) throw new AppError("Forbidden", 403);
   if (offer.status !== "PENDING" && offer.status !== "COUNTERED") {
     throw new AppError("This offer is no longer available", 400);
   }
+  const { buyer, seller, other } = resolveRespondingParties(offer as unknown as LeanOffer, user_id);
 
   await Offer.findByIdAndUpdate(id, { status: "DECLINED", responded_at: new Date() });
 
-  const buyer = offer.buyer_id as LeanUser;
-  await EmailService.sendOfferDeclined(buyer.email!, buyer.first_name, listing.item_name);
+  await EmailService.sendOfferDeclined(other.email!, other.first_name, listing.item_name);
 
   await notifyOfferInChat(
     listing._id.toString(),
     buyer._id.toString(),
-    user_id,
+    seller._id.toString(),
     user_id,
     "Declined the offer",
     offer._id.toString()
   );
 
+  emitOfferUpdate({
+    _id: offer._id,
+    listing_id: listing._id,
+    buyer_id: buyer._id,
+    seller_id: seller._id,
+    status: "DECLINED",
+    amount: offer.amount,
+    parent_offer_id: offer.parent_offer_id,
+  });
+
   await createNotification({
-    user_id: buyer._id,
+    user_id: other._id,
     type: "OFFER_DECLINED",
     title: "Offer declined",
     body: `Your offer on "${listing.item_name}" was declined`,
@@ -381,12 +490,47 @@ export const withdrawOffer = asyncHandler(async (req: Request, res: Response) =>
 
   const offer = await Offer.findById(id).lean();
   if (!offer) throw new AppError("Offer not found", 404);
-  if (offer.buyer_id.toString() !== user_id) throw new AppError("Forbidden", 403);
+  if (offer.buyer_id.toString() !== user_id && offer.seller_id.toString() !== user_id) {
+    throw new AppError("Forbidden", 403);
+  }
   if (offer.status !== "PENDING" && offer.status !== "COUNTERED") {
     throw new AppError("Only pending offers can be withdrawn", 400);
   }
+  const proposer_id = offer.proposed_by ? offer.proposed_by.toString() : offer.buyer_id.toString();
+  if (proposer_id !== user_id) {
+    throw new AppError("Only the party who made this offer can withdraw it", 403);
+  }
 
   await Offer.findByIdAndUpdate(id, { status: "WITHDRAWN", responded_at: new Date() });
+
+  const recipient_id = offer.buyer_id.toString() === user_id ? offer.seller_id.toString() : offer.buyer_id.toString();
+
+  await notifyOfferInChat(
+    offer.listing_id.toString(),
+    offer.buyer_id.toString(),
+    offer.seller_id.toString(),
+    user_id,
+    `Withdrew the offer of ₦${offer.amount.toLocaleString()}`,
+    offer._id.toString()
+  );
+
+  emitOfferUpdate({
+    _id: offer._id,
+    listing_id: offer.listing_id,
+    buyer_id: offer.buyer_id,
+    seller_id: offer.seller_id,
+    status: "WITHDRAWN",
+    amount: offer.amount,
+    parent_offer_id: offer.parent_offer_id,
+  });
+
+  await createNotification({
+    user_id: recipient_id,
+    type: "OFFER_WITHDRAWN",
+    title: "Offer withdrawn",
+    body: `The offer of ₦${offer.amount.toLocaleString()} was withdrawn`,
+    related_listing_id: offer.listing_id,
+  }).catch(() => undefined);
 
   return sendSuccess({ res, message: "Offer withdrawn successfully" });
 });

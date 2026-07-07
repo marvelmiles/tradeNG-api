@@ -5,6 +5,7 @@ export type NotificationType =
   | "OFFER_ACCEPTED"
   | "OFFER_COUNTERED"
   | "OFFER_DECLINED"
+  | "OFFER_WITHDRAWN"
   | "PAYMENT_RECEIVED"
   | "PAYMENT_FAILED"
   | "PAYMENT_REVERSED"
@@ -41,6 +42,7 @@ const notificationSchema = new Schema<INotification>(
         "OFFER_ACCEPTED",
         "OFFER_COUNTERED",
         "OFFER_DECLINED",
+        "OFFER_WITHDRAWN",
         "PAYMENT_RECEIVED",
         "PAYMENT_FAILED",
         "PAYMENT_REVERSED",

@@ -19,21 +19,25 @@ import type { CreateConversationInput, SendMessageInput } from "@/api/v1/validat
 
 type LeanUser = { _id: Types.ObjectId; first_name: string; last_name: string };
 type LeanListing = { _id: Types.ObjectId; item_name: string; images: string[] };
+type LeanTransaction = { _id: Types.ObjectId; status: string };
 type LeanOffer = {
   _id: Types.ObjectId;
   status: string;
   parent_offer_id: Types.ObjectId | null;
-  transaction_id: Types.ObjectId | null;
+  transaction_id: Types.ObjectId | LeanTransaction | null;
   amount: number;
 };
 
 const formatOfferRef = (offer: Types.ObjectId | LeanOffer | null | undefined) => {
   if (!offer || offer instanceof Types.ObjectId) return null;
+  const transaction = offer.transaction_id;
+  const is_populated_transaction = !!transaction && !(transaction instanceof Types.ObjectId);
   return {
     id: offer._id.toString(),
     status: offer.status,
     parent_offer_id: offer.parent_offer_id?.toString() ?? null,
-    transaction_id: offer.transaction_id?.toString(),
+    transaction_id: is_populated_transaction ? (transaction as LeanTransaction)._id.toString() : transaction?.toString(),
+    transaction_status: is_populated_transaction ? (transaction as LeanTransaction).status : undefined,
     amount: offer.amount,
   };
 };
@@ -158,7 +162,11 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
     const items = await Message.find({ ...where, ...buildCursorFilter(pagination.cursor) })
       .sort({ _id: -1 })
       .limit(pagination.limit + 1)
-      .populate<{ offer_id: LeanOffer | null }>("offer_id", "status parent_offer_id transaction_id amount")
+      .populate<{ offer_id: LeanOffer | null }>({
+        path: "offer_id",
+        select: "status parent_offer_id transaction_id amount",
+        populate: { path: "transaction_id", select: "status" },
+      })
       .lean();
 
     const paginationResult = buildCursorPagination(pagination.cursor, items, pagination.limit);
@@ -186,7 +194,11 @@ export const getMessages = asyncHandler(async (req: Request, res: Response) => {
       .sort({ _id: -1 })
       .skip(skip)
       .limit(pagination.limit)
-      .populate<{ offer_id: LeanOffer | null }>("offer_id", "status parent_offer_id transaction_id amount")
+      .populate<{ offer_id: LeanOffer | null }>({
+        path: "offer_id",
+        select: "status parent_offer_id transaction_id amount",
+        populate: { path: "transaction_id", select: "status" },
+      })
       .lean(),
     Message.countDocuments(where),
   ]);
@@ -257,10 +269,13 @@ export const markConversationRead = asyncHandler(async (req: Request, res: Respo
   const user_id = req.user!.id;
   await assertParticipant(id, user_id);
 
+  const read_at = new Date();
   await Message.updateMany(
     { conversation_id: id, sender_id: { $ne: user_id }, read_at: null },
-    { read_at: new Date() }
+    { read_at }
   );
+
+  emitToConversation(id, "message:read", { conversation_id: id, reader_id: user_id, read_at });
 
   return sendSuccess({ res, message: "Conversation marked as read" });
 });

@@ -12,8 +12,8 @@ import {
 import { PayoutBank } from "@/models/v1/payout_bank.model";
 import { WithdrawalRequest } from "@/models/v1/withdrawal_request.model";
 import { WalletLedgerEntry } from "@/models/v1/wallet_ledger_entry.model";
-import { getWalletBalances, recordWithdrawalHold } from "@/api/v1/services/wallet.service";
-import type { AddPayoutBankInput, CreateWithdrawalInput } from "@/api/v1/validators/wallet";
+import { getWalletBalances, recordWithdrawalHold, recordWithdrawalReversal } from "@/api/v1/services/wallet.service";
+import type { AddPayoutBankInput, UpdatePayoutBankInput, CreateWithdrawalInput } from "@/api/v1/validators/wallet";
 
 const formatPayoutBank = (bank: { _id: { toString(): string }; bank_name: string; account_number: string; account_name: string; is_default: boolean }) => ({
   id: bank._id.toString(),
@@ -107,6 +107,16 @@ export const getPayoutBanks = asyncHandler(async (req: Request, res: Response) =
   return sendSuccess({ res, data: { payout_banks: banks.map(formatPayoutBank) } });
 });
 
+export const updatePayoutBank = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body as UpdatePayoutBankInput;
+
+  const bank = await PayoutBank.findOneAndUpdate({ _id: id, user_id: req.user!.id }, { $set: updates }, { new: true }).lean();
+  if (!bank) throw new AppError("Payout bank not found", 404);
+
+  return sendSuccess({ res, message: "Payout bank updated", data: { payout_bank: formatPayoutBank(bank) } });
+});
+
 export const deletePayoutBank = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -148,6 +158,22 @@ export const createWithdrawal = asyncHandler(async (req: Request, res: Response)
     message: "Withdrawal request submitted",
     data: { withdrawal: formatWithdrawal(withdrawal) },
   });
+});
+
+export const cancelWithdrawal = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user_id = req.user!.id;
+
+  const withdrawal = await WithdrawalRequest.findOne({ _id: id, user_id });
+  if (!withdrawal) throw new AppError("Withdrawal request not found", 404);
+  if (withdrawal.status !== "PENDING") throw new AppError("Only pending withdrawal requests can be cancelled", 400);
+
+  withdrawal.status = "CANCELLED";
+  await withdrawal.save();
+
+  await recordWithdrawalReversal(user_id, withdrawal._id, withdrawal.amount);
+
+  return sendSuccess({ res, message: "Withdrawal request cancelled", data: { withdrawal: formatWithdrawal(withdrawal) } });
 });
 
 export const getWithdrawals = asyncHandler(async (req: Request, res: Response) => {

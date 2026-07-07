@@ -12,6 +12,9 @@ export interface IOffer extends Document {
   status: OfferStatus;
   parent_offer_id: Types.ObjectId | null;
   transaction_id: Types.ObjectId | null;
+  // Who made this specific offer/counter — the other party (buyer_id or seller_id,
+  // whichever this isn't) is the one who may accept/counter/decline it.
+  proposed_by: Types.ObjectId | null;
   responded_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -32,6 +35,7 @@ const offerSchema = new Schema<IOffer>(
     parent_offer_id: { type: Schema.Types.ObjectId, ref: "Offer", default: null },
     // Set once the offer is accepted and a Transaction is created for it.
     transaction_id: { type: Schema.Types.ObjectId, ref: "Transaction", default: null },
+    proposed_by: { type: Schema.Types.ObjectId, ref: "User", default: null },
     responded_at: { type: Date, default: null },
   },
   {

@@ -320,6 +320,57 @@ socket.on("typing:stop", (payload) => { /* ... */ });
 { "conversation_id": "687a2b1e9c0d4f0012ef5678", "user_id": "686a1c4e3f9b2d0012ab3400" }
 \`\`\`
 
+**4. Read receipts** — fires when the *other* participant calls \`PATCH /conversations/{id}/read\`, so an open thread can flip its sent messages to "read" live instead of waiting for the next fetch:
+
+\`\`\`js
+socket.on("message:read", (payload) => { /* ... */ });
+\`\`\`
+\`\`\`json
+{
+  "conversation_id": "687a2b1e9c0d4f0012ef5678",
+  "reader_id": "686a1c4e3f9b2d0012ab3400",
+  "read_at": "2026-07-07T10:15:30.000Z"
+}
+\`\`\`
+
+### Offers
+
+Every offer state change (\`POST /offers/listings/{listingId}\`, and \`PATCH /offers/{id}/accept\`\`/counter\`\`/decline\`\`/withdraw\`) does two things over the socket, in addition to its REST response:
+
+1. Posts an \`OFFER\`-type message into the listing's conversation, delivered like any other message over \`message:new\` (see above) — this is what makes the offer show up inline in the chat thread. Unlike a plain \`TEXT\` message, this payload carries an \`offer_id\` and a \`transaction_status\`:
+
+\`\`\`json
+{
+  "id": "687a2c0f9c0d4f0012ef56cd",
+  "conversation_id": "687a2b1e9c0d4f0012ef5678",
+  "sender_id": "686a1c4e3f9b2d0012ab3400",
+  "message_type": "OFFER",
+  "body": "Accepted the offer of ₦230,000",
+  "offer_id": "686a1c4e3f9b2d0012ab34ee",
+  "transaction_status": "PENDING_PAYMENT",
+  "created_at": "2026-07-06T10:15:30.000Z"
+}
+\`\`\`
+
+\`transaction_status\` mirrors the accepted offer's Transaction \`status\` (\`PENDING_PAYMENT\`, \`PAID\`, \`RECEIPT_CONFIRMED\`, \`RELEASED\`, \`DISPUTED\`, or \`REFUNDED\`) and is \`undefined\` for offers that haven't been accepted yet (i.e. no transaction exists).
+2. Emits \`offer:updated\` directly to both the buyer's and seller's \`user:<id>\` rooms — no \`conversation:join\` required, so an "Offers received"/"My offers" list screen can stay live even without the conversation open:
+
+\`\`\`js
+socket.on("offer:updated", (payload) => { /* ... */ });
+\`\`\`
+\`\`\`json
+{
+  "id": "686a1c4e3f9b2d0012ab34ee",
+  "listing_id": "686a1c4e3f9b2d0012ab34cd",
+  "status": "ACCEPTED",
+  "amount": 230000,
+  "parent_offer_id": null,
+  "transaction_id": "686a1c4e3f9b2d0012ab3f00"
+}
+\`\`\`
+
+\`status\` reflects whatever the row was just set to (\`PENDING\` on creation, \`ACCEPTED\`, \`COUNTERED\`, \`DECLINED\`, or \`WITHDRAWN\`); \`transaction_id\` is only non-null once an offer has been accepted. Countering emits this event **twice** — once for the original offer (now \`COUNTERED\`) and once for the new counter-offer row (\`PENDING\`).
+
 ### Notifications
 
 No client action is needed to subscribe — every connected socket already sits in its own \`user:<id>\` room. Just listen:
@@ -705,6 +756,13 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
               "Set on a counter-offer — points to the offer it counters.",
             example: null,
           },
+          proposed_by: {
+            type: "string",
+            nullable: true,
+            description:
+              "ID of the party (buyer or seller) who made this specific offer/counter. The *other* party is the one who may `accept`/`counter`/`decline` it while it is `PENDING` or `COUNTERED`; only `proposed_by` may `withdraw` it.",
+            example: "686a1c4e3f9b2d0012ab3400",
+          },
           transaction_id: {
             type: "string",
             nullable: true,
@@ -931,7 +989,7 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           account_name: { type: "string", example: "Adeola Bello" },
           status: {
             type: "string",
-            enum: ["PENDING", "COMPLETED", "REJECTED"],
+            enum: ["PENDING", "COMPLETED", "REJECTED", "CANCELLED"],
             example: "PENDING",
           },
           created_at: {
@@ -1018,6 +1076,21 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
                   "Set once this offer is accepted — the resulting Transaction's ID. Absent/`undefined` otherwise.",
                 example: null,
               },
+              transaction_status: {
+                type: "string",
+                enum: [
+                  "PENDING_PAYMENT",
+                  "PAID",
+                  "RECEIPT_CONFIRMED",
+                  "RELEASED",
+                  "DISPUTED",
+                  "REFUNDED",
+                ],
+                nullable: true,
+                description:
+                  "Status of the Transaction referenced by `transaction_id`. Absent/`undefined` if the offer has no transaction yet.",
+                example: null,
+              },
               amount: { type: "number", example: 100000 },
             },
           },
@@ -1047,6 +1120,7 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
               "OFFER_ACCEPTED",
               "OFFER_COUNTERED",
               "OFFER_DECLINED",
+              "OFFER_WITHDRAWN",
               "PAYMENT_RECEIVED",
               "PAYMENT_FAILED",
               "PAYMENT_REVERSED",
@@ -2278,6 +2352,7 @@ Makes an offer on a listing that has \`allow_price_negotiation\` enabled. Rules:
 - The listing must be **ACTIVE** and have \`allow_price_negotiation: true\`.
 - A seller cannot make an offer on their own listing.
 - The seller is notified via email and in the listing's conversation thread.
+- Both parties receive a live \`offer:updated\` socket event (see Realtime section) alongside the \`message:new\`/\`notification:new\` events, so an open offers list updates without a refetch.
         `,
         security: BEARER,
         parameters: [
@@ -2338,15 +2413,17 @@ Makes an offer on a listing that has \`allow_price_negotiation\` enabled. Rules:
     "/offers/{id}/accept": {
       patch: {
         tags: ["Offers"],
-        summary: "Accept an offer (seller only)",
+        summary: "Accept an offer",
         description: `
-Accepts a **PENDING** or **COUNTERED** offer on the seller's listing. This action:
+Accepts a **PENDING** or **COUNTERED** offer. This action:
 
-1. Creates a new **Transaction** in \`PENDING_PAYMENT\` status at the offer's amount.
+1. Creates a new **Transaction** in \`PENDING_PAYMENT\` status at the offer's amount, and flips the listing to \`SOLD\`.
 2. Sets the offer to \`ACCEPTED\`, stamps its \`transaction_id\` with the new transaction's ID, and declines all other pending/countered offers on the listing.
-3. Notifies the buyer via email and in the listing's conversation thread.
+3. Notifies the other party via email and in the listing's conversation thread, and broadcasts \`offer:updated\` to both parties over the socket (see Realtime section) with the new \`ACCEPTED\` status and \`transaction_id\`.
 
-Only the **seller** of the listing can accept offers.
+**Bidirectional**: an offer can only be accepted by whichever party did *not* make it — i.e. the buyer accepts a seller's counter, and the seller accepts a buyer's (counter-)offer. Calling this as the party who currently holds the offer (whose turn it is to propose, not respond) returns \`403\`.
+
+The buyer should then proceed to checkout — see \`POST /transactions/{id}/checkout\`.
 
 Fetching the accepted offer afterward (e.g. via \`GET /offers/received\`, \`GET /offers/listings/{listingId}/mine\`, or embedded in a message via \`GET /conversations/{id}/messages\`) will include its \`transaction_id\` — use it to link straight to \`GET /transactions/{id}\`.
         `,
@@ -2396,9 +2473,9 @@ Fetching the accepted offer afterward (e.g. via \`GET /offers/received\`, \`GET 
     "/offers/{id}/counter": {
       patch: {
         tags: ["Offers"],
-        summary: "Counter an offer (seller only)",
+        summary: "Counter an offer",
         description:
-          "Declines the given offer with status `COUNTERED` and creates a new offer (from seller to buyer) referencing it via `parent_offer_id`. Only the **seller** of the listing can counter.",
+          "Sets the given offer to `COUNTERED` and creates a new offer referencing it via `parent_offer_id`, with `proposed_by` set to the countering party. **Bidirectional**: only whichever party did *not* make the current offer may counter it — the seller can counter a buyer's offer, and the buyer can counter a seller's counter, back and forth. Calling this while it's your own turn to wait for a response returns `403`. Broadcasts an `offer:updated` socket event to both parties for *each* row that changed — the original offer (now `COUNTERED`) and the new counter-offer row.",
         security: BEARER,
         parameters: [
           {
@@ -2457,9 +2534,9 @@ Fetching the accepted offer afterward (e.g. via \`GET /offers/received\`, \`GET 
     "/offers/{id}/decline": {
       patch: {
         tags: ["Offers"],
-        summary: "Decline an offer (seller only)",
+        summary: "Decline an offer",
         description:
-          "Declines a **PENDING** or **COUNTERED** offer on the seller's listing. Only the **seller** of the listing can decline.",
+          "Declines a **PENDING** or **COUNTERED** offer. **Bidirectional**: only whichever party did *not* make the current offer may decline it — the seller can decline a buyer's offer, and the buyer can decline a seller's counter. Notifies the other party via email, a chat message, and a live `offer:updated` socket event.",
         security: BEARER,
         parameters: [
           {
@@ -2505,9 +2582,9 @@ Fetching the accepted offer afterward (e.g. via \`GET /offers/received\`, \`GET 
     "/offers/{id}/withdraw": {
       patch: {
         tags: ["Offers"],
-        summary: "Withdraw an offer (buyer only)",
+        summary: "Withdraw an offer",
         description:
-          "Withdraws a **PENDING** or **COUNTERED** offer placed by the authenticated buyer.",
+          "Withdraws (cancels) a **PENDING** or **COUNTERED** offer. Only the party who made this specific offer/counter (`proposed_by`) may withdraw it — e.g. a buyer can withdraw their own offer, and a seller can withdraw their own counter-offer. Like accept/counter/decline, this posts an `OFFER`-type message into the listing's conversation (broadcast live over `message:new`), sends the other party an `OFFER_WITHDRAWN` notification (`notification:new`), and broadcasts `offer:updated` to both parties.",
         security: BEARER,
         parameters: [
           {
@@ -3372,6 +3449,67 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
     },
 
     "/wallet/payout-banks/{id}": {
+      patch: {
+        tags: ["Wallet"],
+        summary: "Update a payout bank",
+        description:
+          "Updates one or more fields of a saved payout bank belonging to the authenticated user. At least one field must be provided.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Payout bank ID.",
+            example: "686a1c4e3f9b2d0012ab3900",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  bank_name: {
+                    type: "string",
+                    minLength: 2,
+                    maxLength: 100,
+                    example: "Guaranty Trust Bank",
+                  },
+                  account_number: {
+                    type: "string",
+                    minLength: 10,
+                    maxLength: 10,
+                    example: "0123456789",
+                  },
+                  account_name: {
+                    type: "string",
+                    minLength: 2,
+                    maxLength: 100,
+                    example: "Adeola Bello",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                payout_bank: { $ref: "#/components/schemas/PayoutBank" },
+              },
+            },
+            "Payout bank updated.",
+          ),
+          "400": { $ref: "#/components/responses/ValidationError" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": { $ref: "#/components/responses/NotFound" },
+        },
+      },
       delete: {
         tags: ["Wallet"],
         summary: "Remove a payout bank",
@@ -3470,6 +3608,44 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
           "404": errorEnvelope(404, "NOT_FOUND", "Payout bank not found."),
+        },
+      },
+    },
+
+    "/wallet/withdrawals/{id}/cancel": {
+      patch: {
+        tags: ["Wallet"],
+        summary: "Cancel a withdrawal request",
+        description:
+          "Cancels a `PENDING` withdrawal request belonging to the authenticated user and reverses the `WITHDRAWAL_HOLD`, crediting the amount back to the available balance via a `WITHDRAWAL_REVERSAL` ledger entry.",
+        security: BEARER,
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Withdrawal request ID.",
+            example: "686a1c4e3f9b2d0012ab3a00",
+          },
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                withdrawal: { $ref: "#/components/schemas/WithdrawalRequest" },
+              },
+            },
+            "Withdrawal request cancelled.",
+          ),
+          "400": errorEnvelope(
+            400,
+            "BAD_REQUEST",
+            "Only pending withdrawal requests can be cancelled.",
+          ),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": errorEnvelope(404, "NOT_FOUND", "Withdrawal request not found."),
         },
       },
     },
@@ -3692,7 +3868,7 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
         tags: ["Conversations"],
         summary: "Mark a conversation as read",
         description:
-          "Marks all messages from the other participant in the conversation as read.",
+          "Marks all messages from the other participant in the conversation as read, and broadcasts a live `message:read` socket event to the conversation room (see Realtime section) so the other participant's open thread reflects it immediately.",
         security: BEARER,
         parameters: [
           {

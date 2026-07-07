@@ -33,8 +33,8 @@ import type { DisputeInput } from "@/api/v1/validators/transaction";
 const buildCheckoutCallbackUrl = (
   transaction_id: string,
 ): string | undefined => {
-  // const url = `${env.FRONTEND_URL}/payment-success/${transaction_id}`;
-  const url = `${"https://trade-ng-kappa.vercel.app"}/callback`;
+  const url = `${env.FRONTEND_URL}/payment-status/${transaction_id}`;
+  // const url = `${"https://trade-ng-kappa.vercel.app"}/callback`;
 
   try {
     console.log("building callback", url);
@@ -225,6 +225,7 @@ export const checkoutTransaction = asyncHandler(
 
     let checkout;
     try {
+      console.log("creating checkout");
       checkout = await createCheckoutOrder({
         order_reference: tx._id.toString(),
         amount: tx.amount,
