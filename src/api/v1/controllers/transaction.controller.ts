@@ -425,6 +425,8 @@ export const raiseDispute = asyncHandler(
 
     const reason = _reason || description || "";
 
+    console.log(reason, _reason, description, " reason...");
+
     const user_id = req.user!.id;
 
     const tx = await Transaction.findById(id)

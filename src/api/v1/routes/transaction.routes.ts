@@ -24,8 +24,13 @@ router.post("/:id/checkout", requireAuth, checkoutTransaction);
 router.get("/:id/verify", requireAuth, verifyTransaction);
 router.post("/:id/confirm-receipt", requireAuth, confirmReceipt);
 router.post("/:id/release", requireAuth, releasePayment);
-router.post("/:id/dispute", requireAuth, validate(disputeSchema), raiseDispute);
+router.post("/:id/dispute", requireAuth, raiseDispute);
 router.get("/:id/dispute", requireAuth, getDispute);
-router.post("/:id/reviews", requireAuth, validate(createReviewSchema), createReview);
+router.post(
+  "/:id/reviews",
+  requireAuth,
+  validate(createReviewSchema),
+  createReview,
+);
 
 export default router;
