@@ -48,7 +48,6 @@ const userSchema = new Schema<IUser>(
     last_name: { type: String, required: true, trim: true, maxlength: 50 },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
-    // Bumped on signout to invalidate every previously issued JWT for this user.
     token_version: { type: Number, default: 0 },
     phone_number: { type: String, default: null, trim: true },
     about: { type: String, default: null, trim: true, maxlength: 500 },

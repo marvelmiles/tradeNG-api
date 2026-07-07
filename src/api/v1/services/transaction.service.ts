@@ -59,7 +59,6 @@ export const createTransactionForSale = async (
   }
 };
 
-// Shared by the payment webhook and the manual verify-transaction endpoint.
 export const markTransactionPaid = async (
   transaction_id: Types.ObjectId | string,
 ): Promise<"PAID" | null> => {
@@ -95,9 +94,6 @@ export const markTransactionPaid = async (
   return "PAID";
 };
 
-// Reverses a PAID/RECEIPT_CONFIRMED transaction when Nomba reports a
-// payment_reversal — escrowed funds haven't been released to the seller yet,
-// so this only needs to release the hold, not claw anything back.
 export const markTransactionReversed = async (
   transaction_id: Types.ObjectId | string,
 ): Promise<"REFUNDED" | null> => {
@@ -138,8 +134,6 @@ export const markTransactionReversed = async (
   return "REFUNDED";
 };
 
-// Nomba reported a failed payment attempt — the transaction stays
-// PENDING_PAYMENT so the buyer can retry checkout; just let them know.
 export const notifyPaymentFailed = async (
   transaction_id: Types.ObjectId | string,
 ): Promise<void> => {

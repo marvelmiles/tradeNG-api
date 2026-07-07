@@ -11,7 +11,6 @@ export interface TopSellerRanking {
   total_revenue: number;
 }
 
-// Ranks sellers by completed (RELEASED) sales, tie-broken by revenue.
 export const getTopSellerRanking = async (limit: number): Promise<TopSellerRanking[]> =>
   Transaction.aggregate<TopSellerRanking>([
     { $match: { status: "RELEASED" } },
@@ -39,7 +38,6 @@ export interface TopSeller {
   review_count: number;
 }
 
-// Shared by GET /discovery/top-sellers (full list) and GET /discovery/stats (short preview).
 export const resolveTopSellers = async (limit: number): Promise<TopSeller[]> => {
   const ranking = await getTopSellerRanking(limit);
   if (ranking.length === 0) return [];

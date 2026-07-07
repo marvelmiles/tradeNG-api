@@ -1,5 +1,3 @@
-// OpenAPI 3.0 specification for TradeNG API v1
-
 const envelope = (dataSchema: object | null, description: string) => ({
   type: "object",
   description,
@@ -270,7 +268,6 @@ socket.on("error", (payload) => console.error(payload.message));
 **1. Join a conversation** so you start receiving its \`message:new\`/\`typing:*\` events. Do this for every conversation the buyer/seller screen has open (there's no bulk-join — one \`conversation:join\` per \`conversation_id\`):
 
 \`\`\`js
-// → emit
 socket.emit("conversation:join", { conversation_id: "687a2b1e9c0d4f0012ef5678" });
 \`\`\`
 
@@ -279,7 +276,6 @@ There's no ack event for a successful join; if you're not a buyer/seller on that
 **2. Send a message.** This is the realtime equivalent of \`POST /conversations/{id}/messages\` — use whichever fits your client; both end up calling the same persistence logic and both broadcast \`message:new\` to everyone in the room (including your own other tabs).
 
 \`\`\`js
-// → emit
 socket.emit("message:send", {
   conversation_id: "687a2b1e9c0d4f0012ef5678",
   body: "Is this still available?",
@@ -289,7 +285,6 @@ socket.emit("message:send", {
 A blank/whitespace-only \`body\` is silently ignored (no error emitted). \`message:send\` only creates plain \`TEXT\` messages — \`OFFER\`/\`SYSTEM\` messages are created server-side by the Offers flow and delivered the same way over \`message:new\`.
 
 \`\`\`js
-// ← listen
 socket.on("message:new", (message) => { /* ... */ });
 \`\`\`
 \`\`\`json
@@ -308,11 +303,9 @@ The message's recipient (whichever of buyer/seller didn't send it) also gets a \
 **3. Typing indicator** — fire on keystroke/blur; there's no payload validation or persistence, it's a bare broadcast to the room:
 
 \`\`\`js
-// → emit
 socket.emit("typing:start", { conversation_id: "687a2b1e9c0d4f0012ef5678" });
 socket.emit("typing:stop", { conversation_id: "687a2b1e9c0d4f0012ef5678" });
 
-// ← listen (fired to the other participant, not echoed back to the sender)
 socket.on("typing:start", (payload) => { /* ... */ });
 socket.on("typing:stop", (payload) => { /* ... */ });
 \`\`\`
@@ -447,7 +440,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
       },
     },
     schemas: {
-      // ─── Pagination ─────────────────────────────────────────────
       PagePagination: {
         type: "object",
         properties: {
@@ -476,7 +468,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         },
       },
 
-      // ─── User ────────────────────────────────────────────────────
       UserSummary: {
         type: "object",
         properties: {
@@ -621,7 +612,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         },
       },
 
-      // ─── Category ───────────────────────────────────────────────
       Category: {
         type: "object",
         properties: {
@@ -664,7 +654,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         },
       },
 
-      // ─── Listing ─────────────────────────────────────────────────
       Listing: {
         type: "object",
         properties: {
@@ -743,7 +732,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         },
       },
 
-      // ─── Offer ───────────────────────────────────────────────────
       Offer: {
         type: "object",
         properties: {
@@ -810,7 +798,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         },
       },
 
-      // ─── Transaction ─────────────────────────────────────────────
       Transaction: {
         type: "object",
         properties: {
@@ -955,7 +942,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         ],
       },
 
-      // ─── Wallet ──────────────────────────────────────────────────
       Wallet: {
         type: "object",
         properties: {
@@ -1021,7 +1007,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         },
       },
 
-      // ─── Conversations & Messages ──────────────────────────────
       Conversation: {
         type: "object",
         properties: {
@@ -1129,7 +1114,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         },
       },
 
-      // ─── Notification ────────────────────────────────────────────
       Notification: {
         type: "object",
         properties: {
@@ -1187,7 +1171,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
         },
       },
 
-      // ─── Review ──────────────────────────────────────────────────
       Review: {
         type: "object",
         properties: {
@@ -1214,7 +1197,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
       },
     },
 
-    // ─── Reusable error responses ─────────────────────────────────
     responses: {
       Unauthorized: errorEnvelope(
         401,
@@ -1251,9 +1233,6 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
   },
 
   paths: {
-    // ═══════════════════════════════════════════════════════════════
-    //  AUTH
-    // ═══════════════════════════════════════════════════════════════
     "/auth/signup": {
       post: {
         tags: ["Auth"],
@@ -1576,9 +1555,6 @@ Because tokens are stateless, any request made with a token issued before this c
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  LISTINGS
-    // ═══════════════════════════════════════════════════════════════
     "/listings": {
       get: {
         tags: ["Listings"],
@@ -2084,9 +2060,6 @@ Starts a direct purchase of an **ACTIVE** listing at its listed \`price\`, creat
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  DISCOVERY
-    // ═══════════════════════════════════════════════════════════════
     "/discovery/stats": {
       get: {
         tags: ["Discovery"],
@@ -2284,9 +2257,6 @@ Returns **ACTIVE** listings ranked by \`view_count\` (highest first) — a proxy
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  OFFERS
-    // ═══════════════════════════════════════════════════════════════
     "/offers/received": {
       get: {
         tags: ["Offers"],
@@ -2633,9 +2603,6 @@ Fetching the accepted offer afterward (e.g. via \`GET /offers/received\`, \`GET 
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  TRANSACTIONS
-    // ═══════════════════════════════════════════════════════════════
     "/transactions": {
       get: {
         tags: ["Transactions"],
@@ -3102,9 +3069,6 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  CATEGORIES
-    // ═══════════════════════════════════════════════════════════════
     "/categories": {
       get: {
         tags: ["Categories"],
@@ -3235,9 +3199,6 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  UPLOADS
-    // ═══════════════════════════════════════════════════════════════
     "/uploads/images": {
       post: {
         tags: ["Uploads"],
@@ -3346,9 +3307,6 @@ Leaves a rating and optional comment for the other party (buyer or seller) on a 
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  WALLET
-    // ═══════════════════════════════════════════════════════════════
     "/wallet": {
       get: {
         tags: ["Wallet"],
@@ -3673,9 +3631,6 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  ORDERS
-    // ═══════════════════════════════════════════════════════════════
     "/orders/buying": {
       get: {
         tags: ["Orders"],
@@ -3728,9 +3683,6 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  CONVERSATIONS
-    // ═══════════════════════════════════════════════════════════════
     "/conversations": {
       get: {
         tags: ["Conversations"],
@@ -3912,9 +3864,6 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  NOTIFICATIONS
-    // ═══════════════════════════════════════════════════════════════
     "/notifications": {
       get: {
         tags: ["Notifications"],
@@ -3999,9 +3948,6 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  PROFILE
-    // ═══════════════════════════════════════════════════════════════
     "/profile/me": {
       get: {
         tags: ["Profile"],
@@ -4360,9 +4306,6 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  REVIEWS
-    // ═══════════════════════════════════════════════════════════════
     "/users/{userId}/reviews": {
       get: {
         tags: ["Reviews"],
@@ -4397,9 +4340,6 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
       },
     },
 
-    // ═══════════════════════════════════════════════════════════════
-    //  SUPPORT
-    // ═══════════════════════════════════════════════════════════════
     "/support/contact": {
       post: {
         tags: ["Support"],

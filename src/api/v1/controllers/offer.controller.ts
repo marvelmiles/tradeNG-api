@@ -91,9 +91,6 @@ const formatUser = (user: Types.ObjectId | LeanUser | null | undefined) => {
   return { id: user._id.toString(), first_name: user.first_name, last_name: user.last_name };
 };
 
-// Who proposed the current row. Falls back for pre-migration rows that predate
-// `proposed_by`: a countered row (has a parent) was always seller-initiated back
-// then, since only sellers could counter; anything else was buyer-initiated.
 const inferProposerId = (offer: LeanOffer): string => {
   if (offer.proposed_by) return offer.proposed_by.toString();
   const buyer = offer.buyer_id as LeanUser;
@@ -101,8 +98,6 @@ const inferProposerId = (offer: LeanOffer): string => {
   return offer.parent_offer_id ? seller._id.toString() : buyer._id.toString();
 };
 
-// Resolves the two parties on the offer and asserts `actor_id` is the one whose
-// turn it is to respond (accept/counter/decline) to the current PENDING/COUNTERED row.
 const resolveRespondingParties = (offer: LeanOffer, actor_id: string) => {
   const buyer = offer.buyer_id as LeanUser;
   const seller = offer.seller_id as LeanUser;

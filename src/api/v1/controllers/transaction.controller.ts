@@ -22,14 +22,6 @@ import {
 import { markTransactionPaid } from "@/api/v1/services/transaction.service";
 import type { DisputeInput } from "@/api/v1/validators/transaction";
 
-// callbackUrl is optional, and Nomba appends `orderReference` as a query
-// param on redirect — see
-// https://developer.nomba.com/docs/products/accept-payment/create-checkout-order
-// Their docs describe it as an HTTPS URL, but that's a production
-// expectation, not a hard sandbox requirement; omitting it entirely (e.g. by
-// rejecting a plain-HTTP FRONTEND_URL in local dev) just makes Nomba redirect
-// the buyer to its own homepage instead of our payment-success page, so we
-// always send it as long as it's a syntactically valid URL.
 const buildCheckoutCallbackUrl = (
   transaction_id: string,
 ): string | undefined => {
@@ -105,9 +97,6 @@ const formatTransaction = (tx: LeanTransaction) => {
   };
 };
 
-// Core verification logic shared by `verifyTransaction` and `getTransaction`:
-// re-checks a still-PENDING_PAYMENT transaction against Nomba and marks it
-// PAID if the provider confirms payment. Returns the actual up-to-date status.
 const verifyPendingPayment = async (tx: {
   _id: Types.ObjectId;
   status: string;

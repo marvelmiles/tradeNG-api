@@ -14,9 +14,7 @@ export const contactSupport = asyncHandler(async (req: Request, res: Response) =
     await EmailService.sendSupportNotification(name, email, subject, message);
     await EmailService.sendSupportContactReceipt(email, name);
     await ContactMessage.findByIdAndUpdate(contact_message._id, { emailed: true });
-  } catch {
-    // message is already persisted; delivery failure does not block the response
-  }
+  } catch {}
 
   return sendSuccess({
     res,

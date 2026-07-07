@@ -98,9 +98,6 @@ export interface NombaWebhookEvent {
   };
 }
 
-// Signature scheme per https://developer.nomba.com/docs/api-basics/webhook —
-// HMAC-SHA256(base64) of a colon-joined string of transaction fields plus the
-// nomba-timestamp header, compared against the nomba-signature header.
 export const verifyWebhookSignature = (
   payload: NombaWebhookEvent,
   timestamp: string | undefined,
@@ -157,11 +154,6 @@ interface NombaFetchCheckoutTransactionResponse {
 
 const SUCCESS_STATUSES = ["SUCCESS", "PAYMENT_SUCCESSFUL"];
 
-// Nomba's sandbox environment does not expose the online-checkout lookup used
-// in production, so we fall back to filtering account transactions by
-// orderReference there. See:
-// - dev: https://developer.nomba.com/nomba-api-reference/transactions/filter-parent-account-transactions
-// - prod: https://developer.nomba.com/nomba-api-reference/online-checkout/fetch-checkout-transaction
 export const verifyTransaction = async (
   order_reference: string,
 ): Promise<VerifyTransactionResult> => {
@@ -200,8 +192,6 @@ export const verifyTransaction = async (
   };
 };
 
-// Nomba's webhook docs don't publish a dedicated online-checkout example, so
-// we accept the order reference wherever it's found on the transaction event.
 export const extractOrderReference = (
   payload: NombaWebhookEvent,
 ): string | undefined =>

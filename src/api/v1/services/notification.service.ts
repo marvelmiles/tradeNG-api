@@ -52,7 +52,6 @@ export const createNotification = async (params: CreateNotificationParams) => {
   return notification;
 };
 
-// Keeps a user's other open tabs/devices in sync when notifications are read elsewhere.
 export const emitNotificationRead = async (
   user_id: string | Types.ObjectId,
   notification_id: string,

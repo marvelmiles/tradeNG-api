@@ -12,10 +12,6 @@ import {
   NombaWebhookEvent,
 } from "@/lib/nomba";
 
-// Events Nomba can send, per https://developer.nomba.com/docs/api-basics/webhook.
-// Only payment_* events map to anything in this codebase — withdrawals are
-// settled manually by an admin (see wallet.controller.ts), not via Nomba
-// payouts, so the payout_* events have nothing to reconcile against yet.
 const findTransactionByReference = async (payload: NombaWebhookEvent) => {
   const order_reference = extractOrderReference(payload);
   if (!order_reference) return null;

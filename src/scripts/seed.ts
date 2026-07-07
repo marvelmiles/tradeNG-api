@@ -34,20 +34,12 @@ const SEED_PASSWORD = "Passw0rd1";
 const daysAgo = (n: number): Date =>
   new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
-// Picsum Photos serves real, publicly-hosted stock photos with no API key —
-// `seed` makes the same URL always resolve to the same image, so re-seeding
-// is deterministic without depending on Cloudinary or any project account.
 const stockImage = (seed: string, width = 800, height = 600): string =>
   `https://picsum.photos/seed/${slugify(seed)}/${width}/${height}`;
 
-// Pravatar serves free, publicly-hosted placeholder avatar photos, seeded the
-// same way for deterministic per-user results.
 const avatar = (seed: string): string =>
   `https://i.pravatar.cc/300?u=${encodeURIComponent(seed)}`;
 
-// Real product photos supplied for a handful of listings, so those items show
-// an image that actually matches their title/category instead of a random
-// stock photo.
 const PRODUCT_IMAGES = {
   jblFlip6:
     "https://www.jbl.com/dw/image/v2/BFND_PRD/on/demandware.static/-/Sites-masterCatalog_Harman/default/dw593abf39/2_JBL_FLIP6_3_4_RIGHT_BLACK_30195_x1.png?sw=535&sh=535",
@@ -70,8 +62,6 @@ const DEFAULT_CATEGORIES: { name: string; image: string }[] = [
   { name: "Others", image: stockImage("category-others") },
 ];
 
-// Collections fully owned by this seed script — wiped and rebuilt on every run.
-// Category is intentionally excluded: Categories serve as app default categories.
 const wipeSeedData = async (): Promise<void> => {
   await Promise.all([
     User.deleteMany({}),
@@ -113,14 +103,14 @@ const seedCategories = async (): Promise<Record<string, ICategory>> => {
 };
 
 interface SeedUsers {
-  adaeze: IUser; // top seller #1
-  chidi: IUser; // top seller #2
-  bola: IUser; // top seller #3
-  ifeoma: IUser; // verified seller, fewer sales
-  tunde: IUser; // unverified — never completed signup
-  grace: IUser; // suspended account
-  emeka: IUser; // regular buyer
-  ngozi: IUser; // regular buyer, seller-verification pending
+  adaeze: IUser;
+  chidi: IUser;
+  bola: IUser;
+  ifeoma: IUser;
+  tunde: IUser;
+  grace: IUser;
+  emeka: IUser;
+  ngozi: IUser;
 }
 
 const seedUsers = async (): Promise<SeedUsers> => {
@@ -581,7 +571,6 @@ const seedConversationsAndOffers = async (
   users: SeedUsers,
   listings: SeedListings,
 ): Promise<void> => {
-  // Ongoing negotiation: Emeka offers on Adaeze's negotiable listing, Adaeze counters.
   const negotiation = await getOrCreateConversation(
     listings.negotiable._id.toString(),
     users.emeka._id.toString(),
@@ -637,7 +626,6 @@ const seedConversationsAndOffers = async (
     offer_id: counter_offer._id,
   });
 
-  // A declined offer, for variety.
   await Offer.create({
     listing_id: (listings.active[3] ?? listings.active[0])._id,
     buyer_id: users.ngozi._id,
@@ -649,7 +637,6 @@ const seedConversationsAndOffers = async (
     created_at: daysAgo(4),
   });
 
-  // Plain question-and-answer conversation, unrelated to offers, with an unread message.
   const chat = await getOrCreateConversation(
     listings.active[0]._id.toString(),
     users.ngozi._id.toString(),
@@ -769,7 +756,6 @@ const seedTransactionsWalletAndReviews = async (
       continue;
     }
 
-    // Every non-pending fixture completed checkout — hold escrow.
     await Transaction.findByIdAndUpdate(tx._id, {
       status: "PAID",
       payment_ref: tx._id.toString(),
@@ -838,7 +824,6 @@ const seedTransactionsWalletAndReviews = async (
         status: "REFUNDED",
         dispute_id: dispute._id,
       });
-      // Resolved-in-buyer's-favor: escrow hold is released, seller gets nothing.
       await WalletLedgerEntry.create({
         user_id: fixture.seller._id,
         transaction_id: tx._id,
@@ -850,7 +835,6 @@ const seedTransactionsWalletAndReviews = async (
       continue;
     }
 
-    // RELEASED: receipt confirmed, payment released, escrow moved to available balance.
     await Transaction.findByIdAndUpdate(tx._id, {
       status: "RELEASED",
       receipt_confirmed_at: daysAgo(created_days_ago - 1),

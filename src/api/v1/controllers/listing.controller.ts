@@ -52,13 +52,10 @@ export const formatListing = (listing: LeanListing) => {
 export const SELLER_POPULATE = { path: "seller_id", select: "first_name last_name is_verified_seller" };
 export const CATEGORY_POPULATE = { path: "category_id", select: "name slug" };
 
-// Promotes a buyer to seller the first time they publish a listing (default role is BUYER).
 const promoteToSeller = async (user_id: string) => {
   await User.updateOne({ _id: user_id, role: { $ne: "SELLER" } }, { role: "SELLER" });
 };
 
-// Shared by discovery endpoints (featured / recent-from-verified-sellers) that
-// list ACTIVE listings most-recent-first with an arbitrary extra `where` filter.
 export const paginateListingsByRecency = async (
   where: Record<string, unknown>,
   pagination: ParsedPagination,
