@@ -10,6 +10,7 @@ import {
   cancelListing,
   buyListing,
   getMyListings,
+  getUserActiveListings,
 } from "@/api/v1/controllers/listing.controller";
 import { createListingSchema, updateListingSchema, listingsQuerySchema } from "@/api/v1/validators/listing";
 
@@ -17,6 +18,7 @@ const router = Router();
 
 router.get("/", validate(listingsQuerySchema, "query"), getListings);
 router.get("/mine", requireAuth, getMyListings);
+router.get("/users/:userId", getUserActiveListings);
 router.get("/:id", getListing);
 
 router.post("/", requireAuth, validate(createListingSchema), createListing);

@@ -307,6 +307,20 @@ export const buyListing = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+export const getUserActiveListings = asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  const user = await User.findById(userId).select("_id").lean();
+  if (!user) throw new AppError("User not found", 404);
+
+  const pagination = parsePaginationQuery(req.query);
+  const where = { seller_id: userId, status: "ACTIVE" };
+
+  const { listings, pagination: paginationResult } = await paginateListingsByRecency(where, pagination);
+
+  return sendSuccess({ res, data: { listings }, pagination: paginationResult });
+});
+
 export const getMyListings = asyncHandler(async (req: Request, res: Response) => {
   const pagination = parsePaginationQuery(req.query);
   const status = req.query.status as string | undefined;

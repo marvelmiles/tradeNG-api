@@ -54,6 +54,34 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
   return sendSuccess({ res, data: { user: formatUser(user) } });
 });
 
+export const getUserPublicProfile = asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  const user = await User.findOne({ _id: userId, status: { $ne: "DELETED" } })
+    .select("first_name last_name about profile_photo is_verified_seller created_at")
+    .lean();
+  if (!user) throw new AppError("User not found", 404);
+
+  const review_summary = await getReviewSummary(user._id);
+
+  return sendSuccess({
+    res,
+    data: {
+      user: {
+        id: user._id.toString(),
+        first_name: user.first_name,
+        last_name: user.last_name,
+        about: user.about,
+        profile_photo: user.profile_photo,
+        is_verified_seller: user.is_verified_seller,
+        review_average: review_summary.review_average,
+        review_count: review_summary.review_count,
+        created_at: user.created_at,
+      },
+    },
+  });
+});
+
 export const updateMe = asyncHandler(async (req: Request, res: Response) => {
   const updates = req.body as UpdateProfileInput;
 

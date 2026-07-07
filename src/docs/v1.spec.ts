@@ -521,6 +521,33 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
           },
         },
       },
+      PublicUserProfile: {
+        type: "object",
+        description: "Public-facing subset of a user's profile — excludes email, phone_number, address, and notification_settings.",
+        properties: {
+          id: { type: "string", example: "686a1c4e3f9b2d0012ab34cd" },
+          first_name: { type: "string", example: "Adeola" },
+          last_name: { type: "string", example: "Bello" },
+          about: {
+            type: "string",
+            nullable: true,
+            example: "Trusted electronics seller since 2023.",
+          },
+          profile_photo: {
+            type: "string",
+            nullable: true,
+            example: "https://res.cloudinary.com/tradeng/avatar.jpg",
+          },
+          is_verified_seller: { type: "boolean", example: false },
+          review_average: { type: "number", example: 4.8 },
+          review_count: { type: "integer", example: 37 },
+          created_at: {
+            type: "string",
+            format: "date-time",
+            example: "2025-07-01T10:00:00.000Z",
+          },
+        },
+      },
 
       // ─── Category ───────────────────────────────────────────────
       Category: {
@@ -1693,6 +1720,41 @@ Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), o
             "Seller's listings with pagination.",
           ),
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/listings/users/{userId}": {
+      get: {
+        tags: ["Listings"],
+        summary: "Get a user's active listings",
+        description:
+          "Public endpoint — returns a given user's **ACTIVE** listings only, newest first. Useful for a seller storefront/profile page. Unlike `GET /listings/mine`, this never includes drafts, sold, or cancelled listings, and requires no authentication.",
+        parameters: [
+          {
+            name: "userId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "User ID.",
+            example: "686a1c4e3f9b2d0012ab3400",
+          },
+          ...paginationQueryParams,
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                listings: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/Listing" },
+                },
+              },
+            },
+            "User's active listings with pagination.",
+          ),
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },
@@ -3817,6 +3879,37 @@ Requests a withdrawal of \`amount\` from the available balance to a saved payout
         responses: {
           "200": ok(null, "Account deleted."),
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+
+    "/profile/users/{userId}": {
+      get: {
+        tags: ["Profile"],
+        summary: "Get a user's public profile",
+        description:
+          "Public endpoint — returns the public-facing subset of a user's profile (name, photo, bio, verified-seller status, review average/count, member-since date). Excludes email, phone number, address, and notification settings. Deleted accounts are treated as not found.",
+        parameters: [
+          {
+            name: "userId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "User ID.",
+            example: "686a1c4e3f9b2d0012ab3400",
+          },
+        ],
+        responses: {
+          "200": ok(
+            {
+              type: "object",
+              properties: {
+                user: { $ref: "#/components/schemas/PublicUserProfile" },
+              },
+            },
+            "Public profile details.",
+          ),
+          "404": { $ref: "#/components/responses/NotFound" },
         },
       },
     },

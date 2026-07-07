@@ -4,6 +4,7 @@ import { validate } from "@/api/v1/middleware/validate";
 import {
   getMe,
   updateMe,
+  getUserPublicProfile,
   getStats,
   getTrustScore,
   requestVerification,
@@ -21,6 +22,8 @@ const router = Router();
 router.get("/me", requireAuth, getMe);
 router.patch("/me", requireAuth, validate(updateProfileSchema), updateMe);
 router.delete("/me", requireAuth, deleteAccount);
+
+router.get("/users/:userId", getUserPublicProfile);
 
 router.get("/stats", requireAuth, getStats);
 router.get("/trust-score", requireAuth, getTrustScore);

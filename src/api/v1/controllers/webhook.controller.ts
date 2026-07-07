@@ -70,7 +70,6 @@ export const handlePaymentWebhook = asyncHandler(
         if (tx) await markTransactionReversed(tx._id);
         break;
       }
-
       default:
         break;
     }
