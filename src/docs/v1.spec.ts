@@ -507,6 +507,13 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
                 format: "email",
                 example: "adeola@example.com",
               },
+              role: {
+                type: "string",
+                enum: ["BUYER", "SELLER"],
+                description:
+                  "Defaults to `BUYER`. Automatically promoted to `SELLER` the first time the user publishes a listing (via `POST /listings` with `status: \"ACTIVE\"`, or `PATCH /listings/{id}/publish`).",
+                example: "BUYER",
+              },
               status: {
                 type: "string",
                 enum: ["ACTIVE", "UNVERIFIED", "SUSPENDED"],
@@ -561,6 +568,13 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
             nullable: true,
             example: "https://res.cloudinary.com/tradeng/avatar.jpg",
           },
+          role: {
+            type: "string",
+            enum: ["BUYER", "SELLER"],
+            description:
+              "Defaults to `BUYER`. Automatically promoted to `SELLER` the first time the user publishes a listing (via `POST /listings` with `status: \"ACTIVE\"`, or `PATCH /listings/{id}/publish`).",
+            example: "BUYER",
+          },
           is_verified_seller: { type: "boolean", example: false },
           notification_settings: {
             $ref: "#/components/schemas/NotificationSettings",
@@ -588,6 +602,13 @@ The platform's \`POST /api/webhooks/payment\` endpoint verifies Nomba's \`nomba-
             type: "string",
             nullable: true,
             example: "https://res.cloudinary.com/tradeng/avatar.jpg",
+          },
+          role: {
+            type: "string",
+            enum: ["BUYER", "SELLER"],
+            description:
+              "Defaults to `BUYER`. Backfilled to `SELLER` on read for legacy users with no `role` set who already have at least one `ACTIVE` listing.",
+            example: "BUYER",
           },
           is_verified_seller: { type: "boolean", example: false },
           review_average: { type: "number", example: 4.8 },
@@ -1645,6 +1666,8 @@ Because tokens are stateless, any request made with a token issued before this c
 Creates a new item listing. The authenticated user becomes the **seller**.
 
 Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), or omit/leave as \`"DRAFT"\` to save a draft and publish later via \`PATCH /listings/{id}/publish\`.
+
+Publishing a listing for the first time (here with \`status: "ACTIVE"\`, or later via \`PATCH /listings/{id}/publish\`) automatically promotes the user's \`role\` from \`BUYER\` to \`SELLER\`.
         `,
         security: BEARER,
         requestBody: {
@@ -1978,7 +2001,7 @@ Set \`status: "ACTIVE"\` to publish immediately (requires at least one image), o
         tags: ["Listings"],
         summary: "Publish a draft listing",
         description:
-          "Publishes a **DRAFT** listing, setting its status to `ACTIVE`. Requires at least one image. Only the seller can publish their own listing.",
+          "Publishes a **DRAFT** listing, setting its status to `ACTIVE`. Requires at least one image. Only the seller can publish their own listing. The first time a user publishes a listing (here, or via `POST /listings` with `status: \"ACTIVE\"`), their `role` is automatically promoted from `BUYER` to `SELLER`.",
         security: BEARER,
         parameters: [
           {

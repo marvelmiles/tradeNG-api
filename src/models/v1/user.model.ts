@@ -1,6 +1,7 @@
 import { Schema, model, Document, Types } from "mongoose";
 
 export type UserStatus = "UNVERIFIED" | "ACTIVE" | "SUSPENDED" | "DELETED";
+export type UserRole = "BUYER" | "SELLER";
 
 export interface INotificationSettings {
   email_general: boolean;
@@ -20,6 +21,7 @@ export interface IUser extends Document {
   about: string | null;
   address: string | null;
   profile_photo: string | null;
+  role: UserRole;
   status: UserStatus;
   delete_at: Date | null;
   is_phone_verified: boolean;
@@ -52,6 +54,7 @@ const userSchema = new Schema<IUser>(
     about: { type: String, default: null, trim: true, maxlength: 500 },
     address: { type: String, default: null, trim: true, maxlength: 300 },
     profile_photo: { type: String, default: null },
+    role: { type: String, enum: ["BUYER", "SELLER"], default: "BUYER" },
     status: { type: String, enum: ["UNVERIFIED", "ACTIVE", "SUSPENDED", "DELETED"], default: "UNVERIFIED" },
     delete_at: { type: Date, default: null },
     is_phone_verified: { type: Boolean, default: false },

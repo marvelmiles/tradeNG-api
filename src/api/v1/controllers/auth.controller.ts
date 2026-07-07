@@ -64,7 +64,12 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
       Date.now() + env.OTP_EXPIRY_MINUTES * 60 * 1000,
     );
 
-    await Otp.create({ user_id: user._id, code: otp, purpose: "SIGNUP", expires_at });
+    await Otp.create({
+      user_id: user._id,
+      code: otp,
+      purpose: "SIGNUP",
+      expires_at,
+    });
 
     await EmailService.sendOtp(
       { first_name: user.first_name, email: user.email },
@@ -88,6 +93,7 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
+        role: user.role,
         status: user.status,
         created_at: user.created_at,
       },
@@ -99,7 +105,7 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
   const { email, otp } = req.body as VerifyEmailInput;
 
   const user = await User.findOne({ email })
-    .select("first_name last_name email status")
+    .select("first_name last_name email role status")
     .lean();
 
   if (!user) throw new AppError("Account not found", 404);
@@ -143,6 +149,7 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
+        role: user.role,
         status: "ACTIVE",
       },
     },
@@ -160,12 +167,20 @@ export const resendOtp = asyncHandler(async (req: Request, res: Response) => {
   if (user.status === "ACTIVE")
     throw new AppError("Email is already verified", 409);
 
-  await Otp.updateMany({ user_id: user._id, purpose: "SIGNUP", used: false }, { used: true });
+  await Otp.updateMany(
+    { user_id: user._id, purpose: "SIGNUP", used: false },
+    { used: true },
+  );
 
   const otp = generateOtp();
   const expires_at = new Date(Date.now() + env.OTP_EXPIRY_MINUTES * 60 * 1000);
 
-  await Otp.create({ user_id: user._id, code: otp, purpose: "SIGNUP", expires_at });
+  await Otp.create({
+    user_id: user._id,
+    code: otp,
+    purpose: "SIGNUP",
+    expires_at,
+  });
 
   await EmailService.sendOtp(
     { first_name: user.first_name, email: user.email },
@@ -182,7 +197,9 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password, remember_me } = req.body as LoginInput;
 
   const user = await User.findOne({ email })
-    .select("first_name last_name email password status token_version")
+    .select(
+      "first_name last_name email password role status token_version profile_photo",
+    )
     .lean();
 
   if (!user) throw new AppError("Invalid email or password", 401);
@@ -220,62 +237,93 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
+        role: user.role,
         status: user.status,
+        profile_photo: user.profile_photo,
       },
     },
   });
 });
 
-export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
-  const { email } = req.body as ForgotPasswordInput;
+export const forgotPassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { email } = req.body as ForgotPasswordInput;
 
-  const user = await User.findOne({ email, status: "ACTIVE" }).select("first_name email").lean();
+    const user = await User.findOne({ email, status: "ACTIVE" })
+      .select("first_name email")
+      .lean();
 
-  if (user) {
-    await Otp.updateMany({ user_id: user._id, purpose: "PASSWORD_RESET", used: false }, { used: true });
+    if (user) {
+      await Otp.updateMany(
+        { user_id: user._id, purpose: "PASSWORD_RESET", used: false },
+        { used: true },
+      );
 
-    const otp = generateOtp();
-    const expires_at = new Date(Date.now() + env.OTP_EXPIRY_MINUTES * 60 * 1000);
+      const otp = generateOtp();
+      const expires_at = new Date(
+        Date.now() + env.OTP_EXPIRY_MINUTES * 60 * 1000,
+      );
 
-    await Otp.create({ user_id: user._id, code: otp, purpose: "PASSWORD_RESET", expires_at });
-    await EmailService.sendOtp({ first_name: user.first_name, email: user.email }, otp);
-  }
+      await Otp.create({
+        user_id: user._id,
+        code: otp,
+        purpose: "PASSWORD_RESET",
+        expires_at,
+      });
+      await EmailService.sendOtp(
+        { first_name: user.first_name, email: user.email },
+        otp,
+      );
+    }
 
-  return sendSuccess({
-    res,
-    message: `If an account exists for ${email}, a password reset code has been sent.`,
-  });
-});
+    return sendSuccess({
+      res,
+      message: `If an account exists for ${email}, a password reset code has been sent.`,
+    });
+  },
+);
 
-export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
-  const { email, otp, new_password } = req.body as ResetPasswordInput;
+export const resetPassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { email, otp, new_password } = req.body as ResetPasswordInput;
 
-  const user = await User.findOne({ email, status: "ACTIVE" }).select("_id").lean();
-  if (!user) throw new AppError("Invalid or expired OTP", 400);
+    const user = await User.findOne({ email, status: "ACTIVE" })
+      .select("_id")
+      .lean();
+    if (!user) throw new AppError("Invalid or expired OTP", 400);
 
-  const record = await Otp.findOne({
-    user_id: user._id,
-    code: otp,
-    purpose: "PASSWORD_RESET",
-    used: false,
-    expires_at: { $gt: new Date() },
-  }).lean();
+    const record = await Otp.findOne({
+      user_id: user._id,
+      code: otp,
+      purpose: "PASSWORD_RESET",
+      used: false,
+      expires_at: { $gt: new Date() },
+    }).lean();
 
-  if (!record) throw new AppError("Invalid or expired OTP. Please request a new one.", 400);
+    if (!record)
+      throw new AppError(
+        "Invalid or expired OTP. Please request a new one.",
+        400,
+      );
 
-  const hashed = await bcrypt.hash(new_password, 12);
+    const hashed = await bcrypt.hash(new_password, 12);
 
-  await Otp.findByIdAndUpdate(record._id, { used: true });
-  await User.findByIdAndUpdate(user._id, { password: hashed });
+    await Otp.findByIdAndUpdate(record._id, { used: true });
+    await User.findByIdAndUpdate(user._id, { password: hashed });
 
-  return sendSuccess({ res, message: "Password reset successfully. You can now log in." });
-});
+    return sendSuccess({
+      res,
+      message: "Password reset successfully. You can now log in.",
+    });
+  },
+);
 
 export const signout = asyncHandler(async (req: Request, res: Response) => {
   await User.findByIdAndUpdate(req.user!.id, { $inc: { token_version: 1 } });
 
   return sendSuccess({
     res,
-    message: "Signed out successfully. All active sessions have been invalidated.",
+    message:
+      "Signed out successfully. All active sessions have been invalidated.",
   });
 });
