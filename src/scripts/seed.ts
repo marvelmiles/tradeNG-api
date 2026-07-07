@@ -265,6 +265,9 @@ const seedListings = async (
     l18_active,
     l16_sold,
     l17_sold,
+    l19_active,
+    l20_active,
+    l21_active,
   ] = await Promise.all([
     Listing.create({
       ...base,
@@ -490,10 +493,46 @@ const seedListings = async (
       seller_id: users.bola._id,
       created_at: daysAgo(14),
     }),
+    Listing.create({
+      ...base,
+      item_name: "USB-C Charging Cable",
+      images: listingImages("USB-C Charging Cable"),
+      category_id: gadgets,
+      condition: "NEW",
+      description:
+        "1-metre braided USB-C cable, fast charging. Sold in original packaging.",
+      price: 500,
+      seller_id: users.ifeoma._id,
+      created_at: daysAgo(4),
+    }),
+    Listing.create({
+      ...base,
+      item_name: "Ankara Print Tote Bag",
+      images: listingImages("Ankara Print Tote Bag"),
+      category_id: fashion,
+      condition: "NEW",
+      description:
+        "Handmade Ankara print tote bag, lightweight and durable. Great for everyday use.",
+      price: 1000,
+      seller_id: users.bola._id,
+      created_at: daysAgo(7),
+    }),
+    Listing.create({
+      ...base,
+      item_name: "Wired Earphones with Mic",
+      images: listingImages("Wired Earphones with Mic"),
+      category_id: gadgets,
+      condition: "LIKE_NEW",
+      description:
+        "In-ear wired earphones with built-in mic, used a handful of times, works perfectly.",
+      price: 2500,
+      seller_id: users.chidi._id,
+      created_at: daysAgo(9),
+    }),
   ]);
 
   console.log(
-    `[Seed] Seeded 18 listings across ${Object.keys(categories).length} categories`,
+    `[Seed] Seeded 21 listings across ${Object.keys(categories).length} categories`,
   );
 
   return {
@@ -504,6 +543,9 @@ const seedListings = async (
       l14_active,
       l15_active,
       l18_active,
+      l19_active,
+      l20_active,
+      l21_active,
     ],
     draft: l3_draft,
     cancelled: l8_cancelled,
