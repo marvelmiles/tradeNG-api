@@ -415,7 +415,7 @@ export const releasePayment = asyncHandler(
 export const raiseDispute = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { reason, evidence_urls } = req.body as DisputeInput;
+    const { description: reason, evidence_urls } = req.body as DisputeInput;
     const user_id = req.user!.id;
 
     const tx = await Transaction.findById(id)
