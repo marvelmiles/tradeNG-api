@@ -45,6 +45,22 @@ const stockImage = (seed: string, width = 800, height = 600): string =>
 const avatar = (seed: string): string =>
   `https://i.pravatar.cc/300?u=${encodeURIComponent(seed)}`;
 
+// Real product photos supplied for a handful of listings, so those items show
+// an image that actually matches their title/category instead of a random
+// stock photo.
+const PRODUCT_IMAGES = {
+  jblFlip6:
+    "https://www.jbl.com/dw/image/v2/BFND_PRD/on/demandware.static/-/Sites-masterCatalog_Harman/default/dw593abf39/2_JBL_FLIP6_3_4_RIGHT_BLACK_30195_x1.png?sw=535&sh=535",
+  dellXps:
+    "https://images.unsplash.com/photo-1593642632823-8f785ba67e45?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8ZGVsbCUyMHhwc3xlbnwwfHwwfHx8MA%3D%3D",
+  ankaraJacket:
+    "https://images.unsplash.com/photo-1663044022726-889ee51a682e?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8YW5rYXJhJTIwamFja2V0fGVufDB8fDB8fHww",
+  diningTable:
+    "https://plus.unsplash.com/premium_photo-1675744019321-f90d6d719da7?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8ZGlubmluZyUyMHRhYmxlfGVufDB8fDB8fHww",
+  iphone17:
+    "data:image/jpeg;base64,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",
+} as const;
+
 const DEFAULT_CATEGORIES: { name: string; image: string }[] = [
   { name: "Gadgets", image: stockImage("category-gadgets") },
   { name: "Furniture", image: stockImage("category-furniture") },
@@ -246,6 +262,7 @@ const seedListings = async (
     l13_sold,
     l14_active,
     l15_active,
+    l18_active,
     l16_sold,
     l17_sold,
   ] = await Promise.all([
@@ -329,7 +346,10 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "6-Seater Dining Table Set",
-      images: listingImages("6-Seater Dining Table Set"),
+      images: [
+        PRODUCT_IMAGES.diningTable,
+        stockImage("6-Seater Dining Table Set-2"),
+      ],
       category_id: furniture,
       condition: "USED",
       description:
@@ -376,7 +396,10 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Designer Ankara Jacket",
-      images: listingImages("Designer Ankara Jacket"),
+      images: [
+        PRODUCT_IMAGES.ankaraJacket,
+        stockImage("Designer Ankara Jacket-2"),
+      ],
       category_id: fashion,
       condition: "NEW",
       description: "Custom-tailored Ankara jacket, size L, never worn.",
@@ -410,7 +433,7 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "Dell XPS 13 Laptop",
-      images: listingImages("Dell XPS 13 Laptop"),
+      images: [PRODUCT_IMAGES.dellXps, stockImage("Dell XPS 13 Laptop-2")],
       category_id: electronics,
       condition: "LIKE_NEW",
       description: "Dell XPS 13, i7, 16GB RAM, 1TB SSD. Excellent condition.",
@@ -421,13 +444,28 @@ const seedListings = async (
     Listing.create({
       ...base,
       item_name: "JBL Flip 6 Bluetooth Speaker",
-      images: listingImages("JBL Flip 6 Bluetooth Speaker"),
+      images: [
+        PRODUCT_IMAGES.jblFlip6,
+        stockImage("JBL Flip 6 Bluetooth Speaker-2"),
+      ],
       category_id: gadgets,
       condition: "NEW",
       description: "Sealed, never opened. Bought as a gift, no longer needed.",
       price: 68000,
       seller_id: users.ifeoma._id,
       created_at: daysAgo(6),
+    }),
+    Listing.create({
+      ...base,
+      item_name: "iPhone 17 256GB",
+      images: [PRODUCT_IMAGES.iphone17, stockImage("iPhone 17 256GB-2")],
+      category_id: electronics,
+      condition: "NEW",
+      description:
+        "Brand new, sealed in box. Latest iPhone 17, purchased directly from the Apple Store.",
+      price: 1250000,
+      seller_id: users.ifeoma._id,
+      created_at: daysAgo(3),
     }),
     Listing.create({
       ...base,
@@ -455,11 +493,18 @@ const seedListings = async (
   ]);
 
   console.log(
-    `[Seed] Seeded 17 listings across ${Object.keys(categories).length} categories`,
+    `[Seed] Seeded 18 listings across ${Object.keys(categories).length} categories`,
   );
 
   return {
-    active: [l1_active, l7_active, l11_active, l14_active, l15_active],
+    active: [
+      l1_active,
+      l7_active,
+      l11_active,
+      l14_active,
+      l15_active,
+      l18_active,
+    ],
     draft: l3_draft,
     cancelled: l8_cancelled,
     negotiable: l2_negotiable,
